@@ -170,6 +170,25 @@ int rx65n_dataflash_erase_all(void)
                    (unsigned long)i, (unsigned long)r0, (unsigned long)r1, (unsigned long)r2,
                    ((r0 == r1) && (r1 == r2)) ? "stable" : "UNSTABLE");
         }
+
+        /* FACI blank check does not depend on CPU bus reads: it tells whether the array is really erased. */
+        {
+            flash_res_t bc_res = FLASH_RES_NOT_BLANK;
+            flash_err_t bc_err = R_FLASH_BlankCheck(RX65N_DF_START_ADDR, RX65N_DF_BLOCK_SIZE, &bc_res);
+            printf("  [DF_HW] FACI BlankCheck(blk0, 64B): err=%d result=%s\r\n", (int)bc_err,
+                   (FLASH_RES_BLANK == bc_res) ? "BLANK" : "NOT_BLANK");
+            bc_res = FLASH_RES_NOT_BLANK;
+            bc_err = R_FLASH_BlankCheck(RX65N_DF_START_ADDR, RX65N_DF_SIZE, &bc_res);
+            printf("  [DF_HW] FACI BlankCheck(all, 32KB): err=%d result=%s\r\n", (int)bc_err,
+                   (FLASH_RES_BLANK == bc_res) ? "BLANK" : "NOT_BLANK");
+            rx65n_dataflash_ensure_read_mode();
+        }
+
+        /* Re-read after a settling delay to rule out a read-mode transition wait time. */
+        R_BSP_SoftwareDelay(1, BSP_DELAY_MILLISECS);
+        printf("  [DF_HW] re-read after 1ms: 0x%08lX\r\n",
+               (unsigned long)(*(volatile uint32_t *)RX65N_DF_START_ADDR));
+
         if (first_word != 0xFFFFFFFFUL)
         {
             printf("  [DF_HW] WARNING: erase not reflected in hardware (first word != 0xFFFFFFFF)\r\n");
