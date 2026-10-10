@@ -20,6 +20,11 @@ int rx65n_dataflash_init(void)
 
     if ((FLASH_SUCCESS == err) || (FLASH_ERR_ALREADY_OPEN == err))
     {
+        /* NOTE: The RX65N FLASH register block (see iodefine.h st_flash) has no DFLRE0/1 or
+         * DFLWE0/1 registers (those belong to other RX families). Data Flash read/write access
+         * on RX65N is gated by FENTRYR (P/E vs. read mode) and FWEPROR.FLWE, which the FIT
+         * driver manages. Hence we only make sure the sequencer is in memory-mapped read mode. */
+        rx65n_dataflash_ensure_read_mode();
         return RX65N_DF_SUCCESS;
     }
 
@@ -138,6 +143,21 @@ int rx65n_dataflash_erase_all(void)
 
     printf("  [DF_HW] All %lu blocks erased successfully. Returned to read mode.\r\n",
            (unsigned long)RX65N_DF_TOTAL_BLOCKS);
+
+    /* Physical verification: directly read the first word of the Data Flash */
+    {
+        uint32_t first_word = *(volatile uint32_t *)RX65N_DF_START_ADDR;
+        printf("  [DF_HW] Direct read check at 0x%08lX: 0x%08lX (Expected: 0xFFFFFFFF)\r\n",
+               (unsigned long)RX65N_DF_START_ADDR, (unsigned long)first_word);
+        printf("  [DF_HW] FENTRYR=0x%04X FWEPROR=0x%02X FASTAT=0x%02X (DFAE=%u CMDLK=%u)\r\n",
+               (unsigned)FLASH.FENTRYR.WORD, (unsigned)FLASH.FWEPROR.BYTE,
+               (unsigned)FLASH.FASTAT.BYTE, (unsigned)FLASH.FASTAT.BIT.DFAE,
+               (unsigned)FLASH.FASTAT.BIT.CMDLK);
+        if (first_word != 0xFFFFFFFFUL)
+        {
+            printf("  [DF_HW] WARNING: erase not reflected in hardware (first word != 0xFFFFFFFF)\r\n");
+        }
+    }
     return RX65N_DF_SUCCESS;
 }
 
