@@ -7,6 +7,7 @@
 #include "r_flash_rx_if.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 /***********************************************************************************************************************
  * Function Name: rx65n_dataflash_init
@@ -137,11 +138,46 @@ int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    flash_err_t err = R_FLASH_Write((uint32_t)src_addr, flash_addr, byte_count);
+    /* Ensure source pointer is 32-bit aligned as required by R_FLASH_Write / FCU */
+    const uint8_t *write_buf = src_addr;
+    uint32_t aligned_stack_buf[16]; /* 64-byte aligned stack buffer for standard small writes */
+    uint8_t *allocated_buf = NULL;
+
+    if (((uintptr_t)src_addr % 4) != 0)
+    {
+        if (byte_count <= sizeof(aligned_stack_buf))
+        {
+            memcpy(aligned_stack_buf, src_addr, byte_count);
+            write_buf = (const uint8_t *)aligned_stack_buf;
+        }
+        else
+        {
+            /* For larger unaligned writes (rare in LevelX, usually 4 or 512 bytes) */
+            allocated_buf = (uint8_t *)malloc(byte_count + 4);
+            if (allocated_buf != NULL)
+            {
+                uintptr_t aligned_addr = ((uintptr_t)allocated_buf + 3) & ~(uintptr_t)3;
+                memcpy((void *)aligned_addr, src_addr, byte_count);
+                write_buf = (const uint8_t *)aligned_addr;
+            }
+        }
+    }
+
+    /* Clear any lingering command lock status before writing */
+    R_FLASH_Control(FLASH_CMD_RESET, NULL);
+
+    flash_err_t err = R_FLASH_Write((uint32_t)write_buf, flash_addr, byte_count);
+
+    if (allocated_buf != NULL)
+    {
+        free(allocated_buf);
+    }
+
     if (FLASH_SUCCESS != err)
     {
         printf("  [DF_HW] R_FLASH_Write failed: dest=0x%08lX, bytes=%lu, err=%d\r\n",
                (unsigned long)flash_addr, (unsigned long)byte_count, (int)err);
+        R_FLASH_Control(FLASH_CMD_RESET, NULL);
         return RX65N_DF_ERR_HW;
     }
 
