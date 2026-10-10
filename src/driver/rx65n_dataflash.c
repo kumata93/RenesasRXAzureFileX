@@ -103,6 +103,60 @@ int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks)
 }
 
 /***********************************************************************************************************************
+ * Function Name: rx65n_dataflash_diag_raw_program
+ * Description  : Diagnostic only. Programs 4 bytes in the last 64-byte block with raw FACI commands (bypassing the
+ *                FIT) to expose FSTATR/FASTAT error flags, reads the result back, then erases the block again.
+ ***********************************************************************************************************************/
+static void rx65n_dataflash_diag_raw_program(void)
+{
+    const uint32_t addr = RX65N_DF_END_ADDR - RX65N_DF_BLOCK_SIZE;
+    volatile uint8_t  *cmd8  = (volatile uint8_t *)0x007E0000UL;
+    volatile uint16_t *cmd16 = (volatile uint16_t *)0x007E0000UL;
+    uint32_t timeout;
+    uint32_t fstatr;
+    uint8_t  fastat;
+
+    FLASH.FENTRYR.WORD = 0xAA80;
+    for (timeout = 100000; (FLASH.FENTRYR.WORD != 0x0080) && (timeout > 0); timeout--) { }
+    FLASH.FWEPROR.BYTE = 0x01;
+
+    FLASH.FSADDR.LONG = addr;
+    *cmd8 = 0xE8;
+    *cmd8 = 0x02;
+    *cmd16 = 0xA5A5;
+    while (FLASH.FSTATR.BIT.DBFULL == 1) { }
+    *cmd16 = 0xA5A5;
+    while (FLASH.FSTATR.BIT.DBFULL == 1) { }
+    *cmd8 = 0xD0;
+    for (timeout = 10000000; (FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0); timeout--) { }
+
+    fstatr = FLASH.FSTATR.LONG;
+    fastat = FLASH.FASTAT.BYTE;
+    printf("  [DF_HW] RAW program @0x%08lX: FSTATR=0x%08lX (ILGLERR=%u PRGERR=%u FLWEERR=%u ILGCOMERR=%u) FASTAT=0x%02X (CMDLK=%u DFAE=%u) timeout_left=%lu\r\n",
+           (unsigned long)addr, (unsigned long)fstatr,
+           (unsigned)((fstatr >> 14) & 1U), (unsigned)((fstatr >> 12) & 1U), (unsigned)((fstatr >> 6) & 1U),
+           (unsigned)((fstatr >> 23) & 1U), (unsigned)fastat,
+           (unsigned)((fastat >> 4) & 1U), (unsigned)((fastat >> 3) & 1U), (unsigned long)timeout);
+
+    if (FLASH.FASTAT.BIT.CMDLK == 1)
+    {
+        *cmd8 = 0xB3; /* forced stop */
+        for (timeout = 1000000; (FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0); timeout--) { }
+    }
+
+    FLASH.FENTRYR.WORD = 0xAA00;
+    for (timeout = 100000; (FLASH.FENTRYR.WORD != 0x0000) && (timeout > 0); timeout--) { }
+    FLASH.FWEPROR.BYTE = 0x00;
+
+    printf("  [DF_HW] RAW program readback @0x%08lX: 0x%08lX (programmed 0xA5A5A5A5)\r\n",
+           (unsigned long)addr, (unsigned long)(*(volatile uint32_t *)addr));
+
+    /* Restore the block to erased state through the FIT */
+    (void)R_FLASH_Erase((flash_block_address_t)addr, 1);
+    rx65n_dataflash_ensure_read_mode();
+}
+
+/***********************************************************************************************************************
  * Function Name: rx65n_dataflash_erase_all
  * Description  : Erases entire 32KB Data Flash block-by-block (all 512 physical 64-byte blocks).
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
@@ -188,6 +242,23 @@ int rx65n_dataflash_erase_all(void)
         R_BSP_SoftwareDelay(1, BSP_DELAY_MILLISECS);
         printf("  [DF_HW] re-read after 1ms: 0x%08lX\r\n",
                (unsigned long)(*(volatile uint32_t *)RX65N_DF_START_ADDR));
+
+        /* Other addresses and access widths (byte / halfword / word) */
+        {
+            static const uint32_t probe[] = { 0x00100040UL, 0x00101000UL, 0x00104000UL, 0x00107FC0UL, 0x00107FFCUL };
+            for (uint32_t i = 0; i < (sizeof(probe) / sizeof(probe[0])); i++)
+            {
+                printf("  [DF_HW] probe 0x%08lX: w=0x%08lX\r\n", (unsigned long)probe[i],
+                       (unsigned long)(*(volatile uint32_t *)probe[i]));
+            }
+            printf("  [DF_HW] width probe @0x00100000: b=%02X %02X %02X %02X h=%04X %04X\r\n",
+                   (unsigned)(*(volatile uint8_t *)0x00100000UL), (unsigned)(*(volatile uint8_t *)0x00100001UL),
+                   (unsigned)(*(volatile uint8_t *)0x00100002UL), (unsigned)(*(volatile uint8_t *)0x00100003UL),
+                   (unsigned)(*(volatile uint16_t *)0x00100000UL), (unsigned)(*(volatile uint16_t *)0x00100002UL));
+        }
+
+        rx65n_dataflash_diag_raw_program();
+
 
         if (first_word != 0xFFFFFFFFUL)
         {
