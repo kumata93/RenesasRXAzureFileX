@@ -70,12 +70,13 @@ void tx_application_define(void *first_unused_memory)
  *                1. Open media with LevelX NOR Flash driver
  *                2. Detect unformatted media / initial open failure
  *                3. Perform physical full-chip erase (0xFF) if unformatted or corrupted
- *                4. Format media as FAT12 via FileX
- *                5. Create test file ("CONFIG.TXT")
- *                6. Write test string with cycle count
- *                7. Flush and close
- *                8. Re-open and read back to verify data integrity
- *                9. Report progress via UART/stdout (printf)
+ *                4. Explicitly open LevelX NOR Flash instance to initialize NOR metadata
+ *                5. Format media as FAT12 via FileX
+ *                6. Create test file ("CONFIG.TXT")
+ *                7. Write test string with cycle count
+ *                8. Flush and close
+ *                9. Re-open and read back to verify data integrity
+ *                10. Report progress via UART/stdout (printf)
  ***********************************************************************************************************************/
 void demo_thread_entry(ULONG thread_input)
 {
@@ -93,7 +94,7 @@ void demo_thread_entry(ULONG thread_input)
     printf("===============================================================\r\n");
 
     /* 1. Attempt to open media via FileX LevelX NOR Flash driver */
-    printf("[Demo] Opening media via fx_levelx_nor_driver...\r\n");
+    printf("[Demo] Step 1: Opening media via fx_levelx_nor_driver...\r\n");
     status = fx_media_open(&levelx_media,
                            "RX_LX_NOR",
                            fx_levelx_nor_driver,
@@ -105,11 +106,12 @@ void demo_thread_entry(ULONG thread_input)
     if (status != FX_SUCCESS)
     {
         printf("[Demo] Media open returned status 0x%02X.\r\n", status);
-        printf("[Demo] Performing physical chip erase of Data Flash (32KB, 512 blocks) to ensure clean 0xFF state...\r\n");
+        printf("[Demo] Step 2: Performing physical chip erase of Data Flash (32KB, 512 blocks)...\r\n");
 
         /* If LevelX was open, close it first before raw flash erase */
         if (g_nor_flash.lx_nor_flash_state == LX_NOR_FLASH_OPENED)
         {
+            printf("[Demo] Closing open LevelX instance before raw erase...\r\n");
             lx_nor_flash_close(&g_nor_flash);
         }
 
@@ -121,7 +123,18 @@ void demo_thread_entry(ULONG thread_input)
         }
         printf("[Demo] Data Flash physical chip erase completed successfully.\r\n");
 
-        printf("[Demo] Formatting Data Flash via LevelX NOR Driver as FAT12 (%lu sectors)...\r\n",
+        /* Explicitly open LevelX NOR Flash instance so LevelX initializes its initial block headers (erase_count = 1) */
+        printf("[Demo] Step 3: Explicitly opening LevelX NOR Flash instance to initialize NOR metadata...\r\n");
+        UINT lx_st = lx_nor_flash_open(&g_nor_flash, "RX65N_NOR_FLASH", lx_nor_rx65n_dataflash_initialize);
+        printf("[Demo] Explicit lx_nor_flash_open returned: 0x%02X (state=0x%08lX)\r\n",
+               lx_st, (unsigned long)g_nor_flash.lx_nor_flash_state);
+        if (lx_st != LX_SUCCESS)
+        {
+            printf("[Demo] ERROR: Explicit lx_nor_flash_open failed with status 0x%02X!\r\n", lx_st);
+            return;
+        }
+
+        printf("[Demo] Step 4: Formatting Data Flash via LevelX NOR Driver as FAT12 (%lu sectors)...\r\n",
                SAMPLE_TOTAL_SECTORS);
 
         status = fx_media_format(&levelx_media,
@@ -148,7 +161,7 @@ void demo_thread_entry(ULONG thread_input)
         printf("[Demo] FAT12 format completed successfully.\r\n");
 
         /* Re-open media after formatting */
-        printf("[Demo] Re-opening media after format...\r\n");
+        printf("[Demo] Step 5: Re-opening media after format...\r\n");
         status = fx_media_open(&levelx_media,
                                "RX_LX_NOR",
                                fx_levelx_nor_driver,

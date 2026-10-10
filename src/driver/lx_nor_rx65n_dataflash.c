@@ -4,6 +4,7 @@
  ***********************************************************************************************************************/
 
 #include "lx_nor_rx65n_dataflash.h"
+#include <stdio.h>
 #include <string.h>
 
 /* Sector buffer for LevelX NOR Flash operation (512 bytes / 128 ULONG words) */
@@ -15,13 +16,17 @@ static ULONG g_lx_nor_sector_buffer[LX_NOR_SECTOR_SIZE];
  ***********************************************************************************************************************/
 UINT lx_nor_rx65n_dataflash_initialize(LX_NOR_FLASH *nor_flash)
 {
+    printf("[LevelX_Port] initialize called (nor_flash=%p)...\r\n", (void *)nor_flash);
+
     if (NULL == nor_flash)
     {
+        printf("[LevelX_Port] ERROR: nor_flash pointer is NULL\r\n");
         return LX_ERROR;
     }
 
     if (rx65n_dataflash_init() != RX65N_DF_SUCCESS)
     {
+        printf("[LevelX_Port] ERROR: rx65n_dataflash_init failed\r\n");
         return LX_ERROR;
     }
 
@@ -39,6 +44,11 @@ UINT lx_nor_rx65n_dataflash_initialize(LX_NOR_FLASH *nor_flash)
 
     /* Setup local sector buffer (512 bytes) */
     nor_flash->lx_nor_flash_sector_buffer              = &g_lx_nor_sector_buffer[0];
+
+    printf("[LevelX_Port] initialize completed: base=0x%08lX, blocks=%lu, words/blk=%lu\r\n",
+           (unsigned long)nor_flash->lx_nor_flash_base_address,
+           (unsigned long)nor_flash->lx_nor_flash_total_blocks,
+           (unsigned long)nor_flash->lx_nor_flash_words_per_block);
 
     return LX_SUCCESS;
 }
@@ -59,6 +69,8 @@ UINT lx_nor_rx65n_dataflash_read(ULONG *flash_address, ULONG *destination, ULONG
 
     if (rx65n_dataflash_read(addr, (uint8_t *)destination, bytes) != RX65N_DF_SUCCESS)
     {
+        printf("[LevelX_Port] ERROR: read failed at 0x%08lX (%lu words)\r\n",
+               (unsigned long)addr, (unsigned long)words);
         return LX_ERROR;
     }
 
@@ -81,6 +93,8 @@ UINT lx_nor_rx65n_dataflash_write(ULONG *flash_address, ULONG *source, ULONG wor
 
     if (rx65n_dataflash_write((const uint8_t *)source, addr, bytes) != RX65N_DF_SUCCESS)
     {
+        printf("[LevelX_Port] ERROR: write failed at 0x%08lX (%lu words / %lu bytes)\r\n",
+               (unsigned long)addr, (unsigned long)words, (unsigned long)bytes);
         return LX_ERROR;
     }
 
@@ -97,13 +111,20 @@ UINT lx_nor_rx65n_dataflash_block_erase(ULONG block, ULONG erase_count)
 
     if (block >= LX_NOR_RX65N_TOTAL_BLOCKS)
     {
+        printf("[LevelX_Port] ERROR: block_erase block %lu >= %lu\r\n",
+               (unsigned long)block, (unsigned long)LX_NOR_RX65N_TOTAL_BLOCKS);
         return LX_ERROR;
     }
 
     uint32_t start_addr = RX65N_DF_START_ADDR + (block * LX_NOR_RX65N_BLOCK_SIZE);
 
+    printf("[LevelX_Port] block_erase: logical block %lu (addr 0x%08lX - 0x%08lX)...\r\n",
+           (unsigned long)block, (unsigned long)start_addr,
+           (unsigned long)(start_addr + LX_NOR_RX65N_BLOCK_SIZE - 1));
+
     if (rx65n_dataflash_erase(start_addr, LX_NOR_RX65N_HW_BLOCKS_PER_LX_BLOCK) != RX65N_DF_SUCCESS)
     {
+        printf("[LevelX_Port] ERROR: rx65n_dataflash_erase failed on block %lu\r\n", (unsigned long)block);
         return LX_ERROR;
     }
 
@@ -124,10 +145,12 @@ UINT lx_nor_rx65n_dataflash_block_erased_verify(ULONG block)
     const uint32_t *word_ptr = (const uint32_t *)(RX65N_DF_START_ADDR + (block * LX_NOR_RX65N_BLOCK_SIZE));
     ULONG words = LX_NOR_RX65N_WORDS_PER_BLOCK;
 
-    while (words--)
+    for (ULONG w = 0; w < words; w++)
     {
-        if (*word_ptr++ != 0xFFFFFFFFUL)
+        if (word_ptr[w] != 0xFFFFFFFFUL)
         {
+            printf("[LevelX_Port] block_erased_verify: block %lu NOT clean at word offset %lu (val=0x%08lX)\r\n",
+                   (unsigned long)block, (unsigned long)w, (unsigned long)word_ptr[w]);
             return LX_ERROR;
         }
     }
@@ -141,7 +164,7 @@ UINT lx_nor_rx65n_dataflash_block_erased_verify(ULONG block)
  ***********************************************************************************************************************/
 UINT lx_nor_rx65n_dataflash_system_error(UINT error_code)
 {
-    (void)error_code;
+    printf("[LevelX_Port] *** SYSTEM ERROR CALLBACK: error_code=0x%02X ***\r\n", error_code);
     return LX_ERROR;
 }
 
