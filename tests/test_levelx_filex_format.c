@@ -67,7 +67,8 @@ static UINT test_nor_driver_block_erased_verify(ULONG block)
     {
         return LX_ERROR;
     }
-    const uint32_t *word_ptr = (const uint32_t *)(uintptr_t)(SIM_DF_START_ADDR + (block * TEST_LX_BLOCK_SIZE));
+    uint32_t offset = block * TEST_LX_BLOCK_SIZE;
+    const uint32_t *word_ptr = (const uint32_t *)(uintptr_t)&g_sim_dataflash[offset];
     ULONG words = TEST_LX_WORDS_PER_BLOCK;
     while (words--)
     {

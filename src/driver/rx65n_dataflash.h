@@ -72,6 +72,12 @@ int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t
  */
 int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_count);
 
+/**
+ * @brief Ensures the flash sequencer has exited P/E mode and returned to memory-mapped Read mode.
+ * @return RX65N_DF_SUCCESS on success, negative value on error.
+ */
+int rx65n_dataflash_ensure_read_mode(void);
+
 #ifdef __cplusplus
 }
 #endif

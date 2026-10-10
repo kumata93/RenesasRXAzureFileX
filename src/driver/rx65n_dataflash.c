@@ -28,6 +28,30 @@ int rx65n_dataflash_init(void)
 }
 
 /***********************************************************************************************************************
+ * Function Name: rx65n_dataflash_ensure_read_mode
+ * Description  : Ensures the flash sequencer has exited P/E mode and returned to memory-mapped Read mode.
+ ***********************************************************************************************************************/
+int rx65n_dataflash_ensure_read_mode(void)
+{
+    /* Transition FCU from P/E mode back to Read mode if FENTRYR is non-zero */
+    if (FLASH.FENTRYR.WORD != 0x0000)
+    {
+        FLASH.FENTRYR.WORD = 0xAA00;
+        uint32_t timeout = 100000;
+        while ((FLASH.FENTRYR.WORD != 0x0000) && (timeout > 0))
+        {
+            timeout--;
+        }
+        FLASH.FWEPROR.BYTE = 0x00; /* Disable FLWE bit */
+    }
+
+    /* Clear any command lock or error state via driver reset */
+    R_FLASH_Control(FLASH_CMD_RESET, NULL);
+
+    return RX65N_DF_SUCCESS;
+}
+
+/***********************************************************************************************************************
  * Function Name: rx65n_dataflash_erase_block
  * Description  : Erases a single 64-byte block starting at block_addr.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
@@ -63,8 +87,12 @@ int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks)
     {
         printf("  [DF_HW] R_FLASH_Erase failed at 0x%08lX (blocks=%lu): err=%d\r\n",
                (unsigned long)start_addr, (unsigned long)num_blocks, (int)err);
+        rx65n_dataflash_ensure_read_mode();
         return RX65N_DF_ERR_HW;
     }
+
+    /* Guarantee flash controller is returned to memory-mapped read mode */
+    rx65n_dataflash_ensure_read_mode();
 
     return RX65N_DF_SUCCESS;
 }
@@ -95,6 +123,7 @@ int rx65n_dataflash_erase_all(void)
         {
             printf("  [DF_HW] ERROR: R_FLASH_Erase failed at block %lu (0x%08lX): err=%d\r\n",
                    (unsigned long)blk, (unsigned long)addr, (int)err);
+            rx65n_dataflash_ensure_read_mode();
             return RX65N_DF_ERR_HW;
         }
 
@@ -104,7 +133,11 @@ int rx65n_dataflash_erase_all(void)
         }
     }
 
-    printf("  [DF_HW] All %lu blocks erased successfully.\r\n", (unsigned long)RX65N_DF_TOTAL_BLOCKS);
+    /* Guarantee flash controller is returned to memory-mapped read mode */
+    rx65n_dataflash_ensure_read_mode();
+
+    printf("  [DF_HW] All %lu blocks erased successfully. Returned to read mode.\r\n",
+           (unsigned long)RX65N_DF_TOTAL_BLOCKS);
     return RX65N_DF_SUCCESS;
 }
 
@@ -177,9 +210,12 @@ int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t
     {
         printf("  [DF_HW] R_FLASH_Write failed: dest=0x%08lX, bytes=%lu, err=%d\r\n",
                (unsigned long)flash_addr, (unsigned long)byte_count, (int)err);
-        R_FLASH_Control(FLASH_CMD_RESET, NULL);
+        rx65n_dataflash_ensure_read_mode();
         return RX65N_DF_ERR_HW;
     }
+
+    /* Guarantee flash controller is returned to memory-mapped read mode */
+    rx65n_dataflash_ensure_read_mode();
 
     return RX65N_DF_SUCCESS;
 }
@@ -202,6 +238,9 @@ int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_co
                (unsigned long)flash_addr, (unsigned long)byte_count);
         return RX65N_DF_ERR_INVALID_PARAM;
     }
+
+    /* Ensure flash peripheral is in memory-mapped Read mode (FENTRYR == 0) */
+    rx65n_dataflash_ensure_read_mode();
 
     if (byte_count > 0)
     {
