@@ -39,7 +39,7 @@ graph TD
     end
 
     subgraph フラッシュポート層
-        LX_DRV["LevelX RX65N NOR ドライバ (lx_nor_rx65n_dataflash.c)<br/>- LX_NOR_FLASH インターフェース実装<br/>- 2,048B 仮想NORブロック ⇄ 64B HWブロック整合"]
+        LX_DRV["LevelX RX65N NOR ドライバ (lx_nor_rx65n_dataflash.c)<br/>- LX_NOR_FLASH インターフェース実装<br/>- 4,096B 仮想NORブロック ⇄ 64B HWブロック整合"]
         HW_DRV["低水準データフラッシュドライバ (rx65n_dataflash.c)<br/>- P/E モード制御、64B ブロック消去、4B ワード書き込み"]
     end
 

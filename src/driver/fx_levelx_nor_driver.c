@@ -105,12 +105,15 @@ VOID fx_levelx_nor_driver(FX_MEDIA *media_ptr)
         {
             media_ptr->fx_media_driver_free_sector_update = FX_TRUE;
 
-            /* Open LevelX NOR flash instance */
-            status = lx_nor_flash_open(&g_nor_flash, "RX65N_NOR_FLASH", lx_nor_rx65n_dataflash_initialize);
-            if (status != LX_SUCCESS)
+            /* Check if LevelX NOR flash is already opened */
+            if (g_nor_flash.lx_nor_flash_state != LX_NOR_FLASH_OPENED)
             {
-                media_ptr->fx_media_driver_status = FX_IO_ERROR;
-                return;
+                status = lx_nor_flash_open(&g_nor_flash, "RX65N_NOR_FLASH", lx_nor_rx65n_dataflash_initialize);
+                if (status != LX_SUCCESS)
+                {
+                    media_ptr->fx_media_driver_status = FX_IO_ERROR;
+                    return;
+                }
             }
 
             media_ptr->fx_media_driver_status = FX_SUCCESS;
@@ -119,11 +122,14 @@ VOID fx_levelx_nor_driver(FX_MEDIA *media_ptr)
 
         case FX_DRIVER_UNINIT:
         {
-            status = lx_nor_flash_close(&g_nor_flash);
-            if (status != LX_SUCCESS)
+            if (g_nor_flash.lx_nor_flash_state == LX_NOR_FLASH_OPENED)
             {
-                media_ptr->fx_media_driver_status = FX_IO_ERROR;
-                return;
+                status = lx_nor_flash_close(&g_nor_flash);
+                if (status != LX_SUCCESS)
+                {
+                    media_ptr->fx_media_driver_status = FX_IO_ERROR;
+                    return;
+                }
             }
 
             media_ptr->fx_media_driver_status = FX_SUCCESS;
@@ -137,7 +143,8 @@ VOID fx_levelx_nor_driver(FX_MEDIA *media_ptr)
             status = lx_nor_flash_sector_read(&g_nor_flash, 0, destination_buffer);
             if (status != LX_SUCCESS)
             {
-                media_ptr->fx_media_driver_status = FX_IO_ERROR;
+                /* When sector 0 is not yet written/mapped in LevelX, return FX_MEDIA_INVALID so FileX knows format is needed */
+                media_ptr->fx_media_driver_status = FX_MEDIA_INVALID;
                 return;
             }
 

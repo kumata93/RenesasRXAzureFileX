@@ -63,6 +63,21 @@ int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks)
 }
 
 /***********************************************************************************************************************
+ * Function Name: rx65n_dataflash_erase_all
+ * Description  : Erases entire 32KB Data Flash (all 512 physical 64-byte blocks).
+ * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
+ ***********************************************************************************************************************/
+int rx65n_dataflash_erase_all(void)
+{
+    if (rx65n_dataflash_init() != RX65N_DF_SUCCESS)
+    {
+        return RX65N_DF_ERR_HW;
+    }
+
+    return rx65n_dataflash_erase(RX65N_DF_START_ADDR, RX65N_DF_TOTAL_BLOCKS);
+}
+
+/***********************************************************************************************************************
  * Function Name: rx65n_dataflash_write
  * Description  : Writes byte_count data from src_addr to flash_addr. byte_count must be a multiple of 4.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.

@@ -19,7 +19,7 @@ extern "C" {
 #define RX65N_DF_SIZE               (32768UL)                               /* 32 KB total capacity */
 #define RX65N_DF_END_ADDR           (RX65N_DF_START_ADDR + RX65N_DF_SIZE)   /* 0x00108000 */
 #define RX65N_DF_BLOCK_SIZE         (64UL)                                  /* Hardware erase unit: 64 bytes */
-#define RX65N_DF_TOTAL_BLOCKS       (RX65N_DF_SIZE / RX65N_DF_BLOCK_SIZE)   /* 512 blocks */
+#define RX65N_DF_TOTAL_BLOCKS       (RX65N_DF_SIZE / RX65N_DF_BLOCK_SIZE)   /* 512 physical blocks */
 #define RX65N_DF_WRITE_UNIT         (4UL)                                   /* Programming unit: 4 bytes */
 
 /* Return status codes */
@@ -47,6 +47,12 @@ int rx65n_dataflash_erase_block(uint32_t block_addr);
  * @return RX65N_DF_SUCCESS on success, negative value on error.
  */
 int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks);
+
+/**
+ * @brief Erase entire 32KB Data Flash memory (all 512 physical 64-byte blocks).
+ * @return RX65N_DF_SUCCESS on success, negative value on error.
+ */
+int rx65n_dataflash_erase_all(void);
 
 /**
  * @brief Write data to Data Flash (in 4-byte multiples).

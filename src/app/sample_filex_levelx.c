@@ -9,6 +9,7 @@
 #include "sample_filex_levelx.h"
 #include "fx_levelx_nor_driver.h"
 #include "lx_nor_rx65n_dataflash.h"
+#include "rx65n_dataflash.h"
 
 #define DEMO_STACK_SIZE         (2048)
 #define DEMO_SECTOR_BUFFER_SIZE (512)
@@ -67,12 +68,14 @@ void tx_application_define(void *first_unused_memory)
  * Function Name: demo_thread_entry
  * Description  : Demo thread demonstrating LevelX + FileX on RX65N Data Flash:
  *                1. Open media with LevelX NOR Flash driver
- *                2. Detect unformatted media and format with FAT12
- *                3. Create test file ("CONFIG.TXT")
- *                4. Write test string with cycle count
- *                5. Flush and close
- *                6. Re-open and read back to verify data integrity
- *                7. Report progress via UART/stdout (printf)
+ *                2. Detect unformatted media / initial open failure
+ *                3. Perform physical full-chip erase (0xFF) if unformatted or corrupted
+ *                4. Format media as FAT12 via FileX
+ *                5. Create test file ("CONFIG.TXT")
+ *                6. Write test string with cycle count
+ *                7. Flush and close
+ *                8. Re-open and read back to verify data integrity
+ *                9. Report progress via UART/stdout (printf)
  ***********************************************************************************************************************/
 void demo_thread_entry(ULONG thread_input)
 {
@@ -98,10 +101,26 @@ void demo_thread_entry(ULONG thread_input)
                            media_memory,
                            sizeof(media_memory));
 
-    /* 2. Check if media is unformatted or has invalid boot sector */
+    /* 2. Check if media is unformatted, invalid boot record, or initial open failed */
     if (status != FX_SUCCESS)
     {
-        printf("[Demo] Media open returned status 0x%02X (Unformatted / Invalid boot record).\r\n", status);
+        printf("[Demo] Media open returned status 0x%02X.\r\n", status);
+        printf("[Demo] Performing physical chip erase of Data Flash (32KB, 512 blocks) to ensure clean 0xFF state...\r\n");
+
+        /* If LevelX was open, close it first before raw flash erase */
+        if (g_nor_flash.lx_nor_flash_state == LX_NOR_FLASH_OPENED)
+        {
+            lx_nor_flash_close(&g_nor_flash);
+        }
+
+        /* Perform physical full-chip erase (32KB: all 512 x 64B hardware blocks) */
+        if (rx65n_dataflash_erase_all() != RX65N_DF_SUCCESS)
+        {
+            printf("[Demo] ERROR: rx65n_dataflash_erase_all failed!\r\n");
+            return;
+        }
+        printf("[Demo] Data Flash physical chip erase completed successfully.\r\n");
+
         printf("[Demo] Formatting Data Flash via LevelX NOR Driver as FAT12 (%lu sectors)...\r\n",
                SAMPLE_TOTAL_SECTORS);
 

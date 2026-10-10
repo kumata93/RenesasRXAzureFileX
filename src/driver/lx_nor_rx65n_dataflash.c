@@ -89,7 +89,7 @@ UINT lx_nor_rx65n_dataflash_write(ULONG *flash_address, ULONG *source, ULONG wor
 
 /***********************************************************************************************************************
  * Function Name: lx_nor_rx65n_dataflash_block_erase
- * Description  : Erases a LevelX block (2048 bytes = 32 contiguous 64-byte hardware blocks).
+ * Description  : Erases a LevelX logical block (4096 bytes = 64 contiguous 64-byte hardware blocks).
  ***********************************************************************************************************************/
 UINT lx_nor_rx65n_dataflash_block_erase(ULONG block, ULONG erase_count)
 {
@@ -147,16 +147,14 @@ UINT lx_nor_rx65n_dataflash_system_error(UINT error_code)
 
 /***********************************************************************************************************************
  * Function Name: lx_nor_rx65n_dataflash_erase_all
- * Description  : Erases all 16 LevelX blocks (the entire 32KB Data Flash).
+ * Description  : Erases all 8 LevelX logical blocks (the entire 32KB Data Flash).
  ***********************************************************************************************************************/
 UINT lx_nor_rx65n_dataflash_erase_all(VOID)
 {
-    for (ULONG block = 0; block < LX_NOR_RX65N_TOTAL_BLOCKS; block++)
+    if (rx65n_dataflash_erase_all() != RX65N_DF_SUCCESS)
     {
-        if (lx_nor_rx65n_dataflash_block_erase(block, 0) != LX_SUCCESS)
-        {
-            return LX_ERROR;
-        }
+        return LX_ERROR;
     }
+
     return LX_SUCCESS;
 }
