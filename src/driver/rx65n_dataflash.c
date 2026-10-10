@@ -25,25 +25,35 @@ int rx65n_dataflash_init(void)
 }
 
 /***********************************************************************************************************************
- * Function Name: rx65n_dataflash_erase
- * Description  : Erases num_blocks contiguous 64-byte blocks starting at addr.
+ * Function Name: rx65n_dataflash_erase_block
+ * Description  : Erases a single 64-byte block starting at block_addr.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
  ***********************************************************************************************************************/
-int rx65n_dataflash_erase(uint32_t addr, uint32_t num_blocks)
+int rx65n_dataflash_erase_block(uint32_t block_addr)
+{
+    return rx65n_dataflash_erase(block_addr, 1);
+}
+
+/***********************************************************************************************************************
+ * Function Name: rx65n_dataflash_erase
+ * Description  : Erases num_blocks contiguous 64-byte blocks starting at start_addr.
+ * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
+ ***********************************************************************************************************************/
+int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks)
 {
     /* Validate start address alignment and range */
-    if ((addr < RX65N_DF_START_ADDR) || ((addr % RX65N_DF_BLOCK_SIZE) != 0))
+    if ((start_addr < RX65N_DF_START_ADDR) || ((start_addr % RX65N_DF_BLOCK_SIZE) != 0))
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
     /* Validate block count and end address */
-    if ((num_blocks == 0) || ((addr + (num_blocks * RX65N_DF_BLOCK_SIZE)) > RX65N_DF_END_ADDR))
+    if ((num_blocks == 0) || ((start_addr + (num_blocks * RX65N_DF_BLOCK_SIZE)) > RX65N_DF_END_ADDR))
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    flash_err_t err = R_FLASH_Erase((flash_block_address_t)addr, num_blocks);
+    flash_err_t err = R_FLASH_Erase((flash_block_address_t)start_addr, num_blocks);
     if (FLASH_SUCCESS != err)
     {
         return RX65N_DF_ERR_HW;
@@ -54,29 +64,30 @@ int rx65n_dataflash_erase(uint32_t addr, uint32_t num_blocks)
 
 /***********************************************************************************************************************
  * Function Name: rx65n_dataflash_write
- * Description  : Writes bytes of data from src to dst. bytes must be a multiple of 4.
+ * Description  : Writes byte_count data from src_addr to flash_addr. byte_count must be a multiple of 4.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
  ***********************************************************************************************************************/
-int rx65n_dataflash_write(const uint8_t *src, uint32_t dst, uint32_t bytes)
+int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t byte_count)
 {
-    if (NULL == src)
+    if (NULL == src_addr)
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
     /* Destination address must be 4-byte aligned and within Data Flash */
-    if ((dst < RX65N_DF_START_ADDR) || ((dst % RX65N_DF_WRITE_UNIT) != 0))
+    if ((flash_addr < RX65N_DF_START_ADDR) || ((flash_addr % RX65N_DF_WRITE_UNIT) != 0))
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
     /* Byte count must be a non-zero multiple of 4 and not overflow Data Flash */
-    if ((bytes == 0) || ((bytes % RX65N_DF_WRITE_UNIT) != 0) || ((dst + bytes) > RX65N_DF_END_ADDR))
+    if ((byte_count == 0) || ((byte_count % RX65N_DF_WRITE_UNIT) != 0) ||
+        ((flash_addr + byte_count) > RX65N_DF_END_ADDR))
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    flash_err_t err = R_FLASH_Write((uint32_t)src, dst, bytes);
+    flash_err_t err = R_FLASH_Write((uint32_t)src_addr, flash_addr, byte_count);
     if (FLASH_SUCCESS != err)
     {
         return RX65N_DF_ERR_HW;
@@ -87,25 +98,25 @@ int rx65n_dataflash_write(const uint8_t *src, uint32_t dst, uint32_t bytes)
 
 /***********************************************************************************************************************
  * Function Name: rx65n_dataflash_read
- * Description  : Reads bytes of data from Data Flash (memory-mapped address) to dst buffer.
+ * Description  : Reads byte_count data from Data Flash (memory-mapped address) to dst_buf buffer.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
  ***********************************************************************************************************************/
-int rx65n_dataflash_read(uint32_t src, uint8_t *dst, uint32_t bytes)
+int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_count)
 {
-    if (NULL == dst)
+    if (NULL == dst_buf)
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    if ((src < RX65N_DF_START_ADDR) || ((src + bytes) > RX65N_DF_END_ADDR))
+    if ((flash_addr < RX65N_DF_START_ADDR) || ((flash_addr + byte_count) > RX65N_DF_END_ADDR))
     {
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    if (bytes > 0)
+    if (byte_count > 0)
     {
-        /* On RX65N, Data Flash (0x00100000 - 0x00107FFF) is memory-mapped for read access */
-        memcpy(dst, (const void *)src, bytes);
+        /* Memory-mapped read */
+        memcpy(dst_buf, (const void *)flash_addr, byte_count);
     }
 
     return RX65N_DF_SUCCESS;
