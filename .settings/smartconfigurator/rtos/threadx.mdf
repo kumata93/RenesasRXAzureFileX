@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+/***********************************************************************************************************************
+  Purpose: Module Description File (MDF) Example (Schema Version 2.0)
+           This is a description of a sample FIT module configuration file
+***********************************************************************************************************************/
+-->
+<module xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" schemaVersion="2.17" xs:noNamespaceSchemaLocation="schema_mdf_2.17.xsd">
+	<fileVersion>1.00</fileVersion>
+	<formatVersion>2.17</formatVersion>
+	<fileTemplate></fileTemplate>
+	<configuration>
+		<!-- TX_MAX_PRIORITIES -->
+		<property id="USE_TX_MAX_PRIORITIES" display="Enable threadx max priority" default="0" type="checkbox">
+			<option id="USE_TX_MAX_PRIORITIES.0" display="Disable" value="0"/>
+			<option id="USE_TX_MAX_PRIORITIES.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_MAX_PRIORITIES" display="Max priority" default="32" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_MAX_PRIORITIES}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_MINIMUM_STACK -->
+		<property id="USE_TX_MINIMUM_STACK" display="Enable threadx minimum stack" default="0" type="checkbox">
+			<option id="USE_TX_MINIMUM_STACK.0" display="Disable" value="0"/>
+			<option id="USE_TX_MINIMUM_STACK.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_MINIMUM_STACK" display="Minimun stack" default="0" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_MINIMUM_STACK}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_TIMER_THREAD_STACK_SIZE -->
+		<property id="USE_TX_TIMER_THREAD_STACK_SIZE" display="Enable threadx stack size" default="0" type="checkbox">
+			<option id="USE_TX_TIMER_THREAD_STACK_SIZE.0" display="Disable" value="0"/>
+			<option id="USE_TX_TIMER_THREAD_STACK_SIZE.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_TIMER_THREAD_STACK_SIZE" display="Timer stack size" default="128" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_TIMER_THREAD_STACK_SIZE}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_TIMER_THREAD_PRIORITY -->
+		<property id="USE_TX_TIMER_THREAD_PRIORITY" display="Enable threadx timer priority" default="0" type="checkbox">
+			<option id="USE_TX_TIMER_THREAD_PRIORITY.0" display="Disable" value="0"/>
+			<option id="USE_TX_TIMER_THREAD_PRIORITY.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_TIMER_THREAD_PRIORITY" display="Timer priority" default="1" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_TIMER_THREAD_PRIORITY}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_TIMER_TICKS_PER_SECOND -->
+		<property id="USE_TX_TIMER_TICKS_PER_SECOND" display="Enable threadx timer ticks per second" default="0" type="checkbox">
+			<option id="USE_TX_TIMER_TICKS_PER_SECOND.0" display="Disable" value="0"/>
+			<option id="USE_TX_TIMER_TICKS_PER_SECOND.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_TIMER_TICKS_PER_SECOND" display="Threadx timer ticks per second" default="100" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_TIMER_TICKS_PER_SECOND}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_THREAD_USER_EXTENSION -->
+		<property id="USE_TX_THREAD_USER_EXTENSION" display="Use threadx user extension" default="0" type="checkbox">
+			<option id="USE_TX_THREAD_USER_EXTENSION.0" display="Disable" value="0"/>
+			<option id="USE_TX_THREAD_USER_EXTENSION.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_NO_FILEX_POINTER -->
+		<property id="USE_TX_NO_FILEX_POINTER" display="Is FileX pointer in threadx control block" default="0" type="checkbox">
+			<option id="USE_TX_NO_FILEX_POINTER.0" display="Disable" value="0"/>
+			<option id="USE_TX_NO_FILEX_POINTER.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_TIMER_PROCESS_IN_ISR -->
+		<property id="USE_TX_TIMER_PROCESS_IN_ISR" display="Call timer expirations" default="0" type="checkbox">
+			<option id="USE_TX_TIMER_PROCESS_IN_ISR.0" display="Disable" value="0"/>
+			<option id="USE_TX_TIMER_PROCESS_IN_ISR.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_REACTIVATE_INLINE -->
+		<property id="USE_TX_REACTIVATE_INLINE" display="In-line timer reactivation" default="0" type="checkbox">
+			<option id="USE_TX_REACTIVATE_INLINE.0" display="Disable" value="0"/>
+			<option id="USE_TX_REACTIVATE_INLINE.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_DISABLE_STACK_FILLING -->
+		<property id="USE_TX_DISABLE_STACK_FILLING
+" display="Enable stack filling" default="0" type="checkbox">
+			<option id="USE_TX_DISABLE_STACK_FILLING.0" display="Disable" value="0"/>
+			<option id="USE_TX_DISABLE_STACK_FILLING.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_ENABLE_STACK_CHECKING -->
+		<property id="USE_TX_ENABLE_STACK_CHECKING
+" display="Enable stack checking" default="0" type="checkbox">
+			<option id="USE_TX_ENABLE_STACK_CHECKING.0" display="Disable" value="0"/>
+			<option id="USE_TX_ENABLE_STACK_CHECKING.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_DISABLE_PREEMPTION_THRESHOLD -->
+		<property id="USE_TX_DISABLE_PREEMPTION_THRESHOLD
+" display="Enable preemption-threshold" default="0" type="checkbox">
+			<option id="USE_TX_DISABLE_PREEMPTION_THRESHOLD.0" display="Disable" value="0"/>
+			<option id="USE_TX_DISABLE_PREEMPTION_THRESHOLD.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_DISABLE_REDUNDANT_CLEARING -->
+		<property id="USE_TX_DISABLE_REDUNDANT_CLEARING" display="Clear global variables" default="0" type="checkbox">
+			<option id="USE_TX_DISABLE_REDUNDANT_CLEARING.0" display="Disable" value="0"/>
+			<option id="USE_TX_DISABLE_REDUNDANT_CLEARING.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_NO_TIMER -->
+		<property id="USE_TX_NO_TIMER" display="No timer processing" default="0" type="checkbox">
+			<option id="USE_TX_NO_TIMER.0" display="Disable" value="0"/>
+			<option id="USE_TX_NO_TIMER.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_DISABLE_NOTIFY_CALLBACKS -->
+		<property id="USE_TX_DISABLE_NOTIFY_CALLBACKS" display="Notify callback" default="1" type="checkbox">
+			<option id="USE_TX_DISABLE_NOTIFY_CALLBACKS.0" display="Disable" value="1"/>
+			<option id="USE_TX_DISABLE_NOTIFY_CALLBACKS.1" display="Enable" value="0"/>
+			<description></description>
+		</property>
+		<!-- TX_INLINE_THREAD_RESUME_SUSPEND -->
+		<property id="USE_TX_INLINE_THREAD_RESUME_SUSPEND" display="Thread resume and suspend" default="0" type="checkbox">
+			<option id="USE_TX_INLINE_THREAD_RESUME_SUSPEND.0" display="Disable" value="0"/>
+			<option id="USE_TX_INLINE_THREAD_RESUME_SUSPEND.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_NOT_INTERRUPTABLE -->
+		<property id="USE_TX_NOT_INTERRUPTABLE" display="Non-interruptable internal ThreadX code " default="0" type="checkbox">
+			<option id="USE_TX_NOT_INTERRUPTABLE.0" display="Disable" value="0"/>
+			<option id="USE_TX_NOT_INTERRUPTABLE.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_ENABLE_EVENT_TRACE -->
+		<property id="USE_TX_ENABLE_EVENT_TRACE" display="Trace event logging code" default="0" type="checkbox">
+			<option id="USE_TX_ENABLE_EVENT_TRACE.0" display="Disable" value="0"/>
+			<option id="USE_TX_ENABLE_EVENT_TRACE.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_BLOCK_POOL_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_BLOCK_POOL_ENABLE_PERFORMANCE_INFO" display="Block pool performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_BLOCK_POOL_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_BLOCK_POOL_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_BYTE_POOL_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_BYTE_POOL_ENABLE_PERFORMANCE_INFO" display="Byte pool performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_BYTE_POOL_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_BYTE_POOL_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_EVENT_FLAGS_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_EVENT_FLAGS_ENABLE_PERFORMANCE_INFO" display="Event flags performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_EVENT_FLAGS_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_EVENT_FLAGS_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_MUTEX_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_MUTEX_ENABLE_PERFORMANCE_INFO" display="Mutex performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_MUTEX_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_MUTEX_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_QUEUE_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_QUEUE_ENABLE_PERFORMANCE_INFO" display="Queue performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_QUEUE_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_QUEUE_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_SEMAPHORE_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_SEMAPHORE_ENABLE_PERFORMANCE_INFO" display="Semaphore performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_SEMAPHORE_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_SEMAPHORE_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_THREAD_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_THREAD_ENABLE_PERFORMANCE_INFO" display="Thread performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_THREAD_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_THREAD_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_TIMER_ENABLE_PERFORMANCE_INFO -->
+		<property id="USE_TX_TIMER_ENABLE_PERFORMANCE_INFO" display="Timer performance gathering" default="0" type="checkbox">
+			<option id="USE_TX_TIMER_ENABLE_PERFORMANCE_INFO.0" display="Disable" value="0"/>
+			<option id="USE_TX_TIMER_ENABLE_PERFORMANCE_INFO.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<!-- TX_BYTE_POOL_MULTIPLE_BLOCK_SEARCH -->
+		<property id="USE_TX_BYTE_POOL_MULTIPLE_BLOCK_SEARCH" display="Enable override byte pool searchs of multiple blocks" default="0" type="checkbox">
+			<option id="USE_TX_BYTE_POOL_MULTIPLE_BLOCK_SEARCH.0" display="Disable" value="0"/>
+			<option id="USE_TX_BYTE_POOL_MULTIPLE_BLOCK_SEARCH.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_BYTE_POOL_MULTIPLE_BLOCK_SEARCH" display="override byte pool searchs of multiple blocks" default="20" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_BYTE_POOL_MULTIPLE_BLOCK_SEARCH}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_BYTE_POOL_DELAY_VALUE -->
+		<property id="USE_TX_BYTE_POOL_DELAY_VALUE" display="Enable override byte pool searchs delay" default="0" type="checkbox">
+			<option id="USE_TX_BYTE_POOL_DELAY_VALUE.0" display="Disable" value="0"/>
+			<option id="USE_TX_BYTE_POOL_DELAY_VALUE.1" display="Enable" value="1"/>
+			<description></description>
+		</property>
+		<property id="TX_BYTE_POOL_DELAY_VALUE" display="override byte pool searchs delay" default="3" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${USE_TX_BYTE_POOL_DELAY_VALUE}" == 1)</constraint>
+			<description></description>
+		</property>
+		<!-- TX_LOW_POWER -->
+		<property id="TX_LOW_POWER" display="Enable low power mode" default="0" type="checkbox">
+			<option id="TX_LOW_POWER.0" display="Disable" value="0"/>
+			<option id="TX_LOW_POWER.1" display="Enable" value="1"/>
+			<description>TX_LOW_POWER macro can be used together with TX_ENABLE_WAIT macro
+Case 1: TX_LOW_POWER == 1 and TX_ENABLE_WAIT == 0: execute user-defined low power consumption function (call tx_low_power_enter/exit)
+Case 2: TX_LOW_POWER == 0 and TX_ENABLE_WAIT == 1: execute only WAIT instruction in ThreadX (tx_low_power_enter/exit are not called)
+Case 3: TX_LOW_POWER == 0 and TX_ENABLE_WAIT == 0: no support for low power consumption
+Case 4: TX_LOW_POWER == 1 and TX_ENABLE_WAIT == 1: execute tx_low_power_enter, WAIT instruction, and tx_low_power_exit
+</description>
+		</property>
+		<!-- TX_LOW_POWER_USER_ENTER -->
+		<property id="TX_LOW_POWER_USER_ENTER" display="Enter low power function" default="Demo_LowPower_Enter()" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${TX_LOW_POWER}" == 1)</constraint>
+			<description>Define the name of the low power preprocessing function</description>
+		</property>
+		<!-- TX_LOW_POWER_USER_EXIT -->
+		<property id="TX_LOW_POWER_USER_EXIT" display="Exit low power function" default="Demo_LowPower_Exit()" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">("${TX_LOW_POWER}" == 1)</constraint>
+			<description>Define the name of the resuming processing function</description>
+		</property>
+		<!-- TX_LOW_POWER_TICKLESS -->
+		<property id="USE_TX_LOW_POWER_TICKLESS" display="Enable tickless operation in low power mode" default="0" type="checkbox">
+			<option id="USE_TX_LOW_POWER_TICKLESS.0" display="Disable" value="0"/>
+			<option id="USE_TX_LOW_POWER_TICKLESS.1" display="Enable" value="1"/>
+			<constraint display="default disable" actionOnFail="disable">("${TX_LOW_POWER}" == 1)</constraint>
+			<description>Define whether threadX's system timer needs to be corrected when returning from low power mode or not.
+If TX_LOW_POWER_TICKLESS macro is defined, ThreadX's system timer does not need to be corrected, otherwise, functions defined by 
+TX_LOW_POWER_TIMER_SETUP and TX_LOW_POWER_USER_TIMER_ADJUST macros are used to correct the timer</description>
+		</property>
+		<!-- USE_TX_LOW_POWER_TIMER_SETUP -->
+		<property id="USE_TX_LOW_POWER_TIMER_SETUP" display="Enable threadx timer setup" default="0" type="checkbox">
+			<option id="USE_TX_LOW_POWER_TIMER_SETUP.0" display="Disable" value="0"/>
+			<option id="USE_TX_LOW_POWER_TIMER_SETUP.1" display="Enable" value="1"/>
+			<constraint display="default disable" actionOnFail="disable">(("${USE_TX_LOW_POWER_TICKLESS}" == 0) &amp;&amp; ("${TX_LOW_POWER}" == 1))</constraint>
+			<description>Define whether TX_LOW_POWER_TIMER_SETUP macro function is needed or not</description>
+		</property>
+		<!-- TX_LOW_POWER_TIMER_SETUP -->
+		<property id="TX_LOW_POWER_TIMER_SETUP" display="Low power timer setup function" default="Demo_LowPower_Timer_Setup" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">(("${TX_LOW_POWER}" == 1) &amp;&amp; ("${USE_TX_LOW_POWER_TICKLESS}" == 0) &amp;&amp; ("${USE_TX_LOW_POWER_TIMER_SETUP}" == 1))</constraint>
+			<description>Defines the setting function name of the timer operating in low power mode</description>
+		</property>
+		<!-- USE_TX_LOW_POWER_USER_TIMER_ADJUST -->
+		<property id="USE_TX_LOW_POWER_USER_TIMER_ADJUST" display="Enable threadx user timer adjust" default="0" type="checkbox">
+			<option id="USE_TX_LOW_POWER_USER_TIMER_ADJUST.0" display="Disable" value="0"/>
+			<option id="USE_TX_LOW_POWER_USER_TIMER_ADJUST.1" display="Enable" value="1"/>
+			<constraint display="default disable" actionOnFail="disable">(("${USE_TX_LOW_POWER_TICKLESS}" == 0) &amp;&amp; ("${TX_LOW_POWER}" == 1))</constraint>
+			<description>Define whether TX_LOW_POWER_USER_TIMER_ADJUST macro function is needed or not</description>
+		</property>
+		<!-- TX_LOW_POWER_USER_TIMER_ADJUST -->
+		<property id="TX_LOW_POWER_USER_TIMER_ADJUST" display="Low power user timer adjust function" default="Demo_LowPower_User_Timer_Adjust()" type="textbox">
+			<constraint display="default disable" actionOnFail="disable">(("${TX_LOW_POWER}" == 1) &amp;&amp; ("${USE_TX_LOW_POWER_TICKLESS}" == 0) &amp;&amp; ("${USE_TX_LOW_POWER_USER_TIMER_ADJUST}" == 1))</constraint>
+			<description>Defines a function name that corrects threadx system timer after returning from low power mode</description>
+		</property>
+		<!-- TX_ENABLE_WAIT -->
+		<property id="TX_ENABLE_WAIT" display="Enable threadx wait" default="0" type="checkbox">
+			<option id="TX_ENABLE_WAIT.0" display="Disable" value="0"/>
+			<option id="TX_ENABLE_WAIT.1" display="Enable" value="1"/>
+			<description>Enable to execute WAIT instruction in threadx</description>
+		</property>
+	</configuration>
+	<!-- MDF builder setting model -->
+	<builderSettings>
+		<!--support RXC & GCCRX compiler-->
+		<builderSetting>
+			<toolchain value="GNURX"/>
+			<targetBoard value=""/>
+			<targetDevice group=""/>
+			<buildOptionSetting optionId="com.renesas.cdt.managedbuild.gcc.core.option.assembler.source.userDefinedOptions">
+				<buildOptionInfo>
+					<buildOptionValue value="-DTX_LOW_POWER=1"/>
+					<preCondition propertyId="TX_LOW_POWER" value="1"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="-DTX_LOW_POWER=0"/>
+					<preCondition propertyId="TX_LOW_POWER" value="0"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="-DTX_ENABLE_WAIT=1"/>
+					<preCondition propertyId="TX_ENABLE_WAIT" value="1"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="-DTX_ENABLE_WAIT=0"/>
+					<preCondition propertyId="TX_ENABLE_WAIT" value="0"/>
+				</buildOptionInfo>
+			</buildOptionSetting>
+		</builderSetting>
+		<builderSetting>
+			<toolchain value="RXC"/>
+			<targetBoard value=""/>
+			<targetDevice group=""/>
+			<!--CCRX compiler-->
+			<buildOptionSetting optionId="com.renesas.cdt.managedbuild.renesas.ccrx.assembler.option.define">
+				<buildOptionInfo>
+					<buildOptionValue value="TX_LOW_POWER=1"/>
+					<preCondition propertyId="TX_LOW_POWER" value="1"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="TX_LOW_POWER=0"/>
+					<preCondition propertyId="TX_LOW_POWER" value="0"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="TX_ENABLE_WAIT=1"/>
+					<preCondition propertyId="TX_ENABLE_WAIT" value="1"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="TX_ENABLE_WAIT=0"/>
+					<preCondition propertyId="TX_ENABLE_WAIT" value="0"/>
+				</buildOptionInfo>
+			</buildOptionSetting>
+		</builderSetting>
+		<!--Support IAR compiler-->
+		<builderSetting>
+			<toolchain value="ICCRX"/>
+			<targetBoard value=""/>
+			<targetDevice group=""/>
+			<!--update by append macro into ipcf file-->
+			<buildOptionSetting optionId="ipcf.asmDefines">
+				<buildOptionInfo>
+					<buildOptionValue value="TX_LOW_POWER=1"/>
+					<preCondition propertyId="TX_LOW_POWER" value="1"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="TX_LOW_POWER=0"/>
+					<preCondition propertyId="TX_LOW_POWER" value="0"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="TX_ENABLE_WAIT=1"/>
+					<preCondition propertyId="TX_ENABLE_WAIT" value="1"/>
+				</buildOptionInfo>
+				<buildOptionInfo>
+					<buildOptionValue value="TX_ENABLE_WAIT=0"/>
+					<preCondition propertyId="TX_ENABLE_WAIT" value="0"/>
+				</buildOptionInfo>
+			</buildOptionSetting>
+		</builderSetting>
+	</builderSettings> 
+</module>

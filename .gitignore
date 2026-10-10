@@ -1,0 +1,43 @@
+# e2 studio / GCC build output directories
+HardwareDebug/
+Debug/
+Release/
+
+# Smart Configurator backup / temporary directories
+trash/
+.settings/fittemp/
+
+# Object & Intermediate Files
+*.o
+*.obj
+*.abs
+*.x
+*.mot
+*.hex
+*.bin
+*.srec
+*.bls
+*.bsp
+
+# Compiler Dependency and List/Map files
+*.d
+*.map
+*.lst
+*.ud
+*.fsy
+
+# Log & Temporary files
+*.tmp
+*~
+*.bak
+*.log
+.gdb_history
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE specific user settings
+.vscode/
+.idea/
