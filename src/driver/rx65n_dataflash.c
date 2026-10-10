@@ -38,7 +38,10 @@ int rx65n_dataflash_init(void)
  ***********************************************************************************************************************/
 int rx65n_dataflash_ensure_read_mode(void)
 {
-    /* Transition FCU from P/E mode back to Read mode if FENTRYR is non-zero */
+    /* Transition FCU from P/E mode back to Read mode if FENTRYR is non-zero.
+     * NOTE: Do NOT call R_FLASH_Control(FLASH_CMD_RESET) here. In the READY state the FIT's
+     * flash_reset() enters Code Flash P/E mode (FENTRYR=0xAA01) from code that is not placed in
+     * RAM (FLASH_CFG_CODE_FLASH_ENABLE == 0), which makes ROM unreadable to the CPU. */
     if (FLASH.FENTRYR.WORD != 0x0000)
     {
         FLASH.FENTRYR.WORD = 0xAA00;
@@ -49,9 +52,6 @@ int rx65n_dataflash_ensure_read_mode(void)
         }
         FLASH.FWEPROR.BYTE = 0x00; /* Disable FLWE bit */
     }
-
-    /* Clear any command lock or error state via driver reset */
-    R_FLASH_Control(FLASH_CMD_RESET, NULL);
 
     return RX65N_DF_SUCCESS;
 }
@@ -153,6 +153,23 @@ int rx65n_dataflash_erase_all(void)
                (unsigned)FLASH.FENTRYR.WORD, (unsigned)FLASH.FWEPROR.BYTE,
                (unsigned)FLASH.FASTAT.BYTE, (unsigned)FLASH.FASTAT.BIT.DFAE,
                (unsigned)FLASH.FASTAT.BIT.CMDLK);
+        printf("  [DF_HW] FSTATR=0x%08lX (FRDY=%u ILGLERR=%u ERSERR=%u PRGERR=%u FLWEERR=%u) FPCKAR=0x%04X EEPFCLK=%u\r\n",
+               (unsigned long)FLASH.FSTATR.LONG, (unsigned)FLASH.FSTATR.BIT.FRDY,
+               (unsigned)FLASH.FSTATR.BIT.ILGLERR, (unsigned)FLASH.FSTATR.BIT.ERSERR,
+               (unsigned)FLASH.FSTATR.BIT.PRGERR, (unsigned)FLASH.FSTATR.BIT.FLWEERR,
+               (unsigned)FLASH.FPCKAR.WORD, (unsigned)FLASH.EEPFCLK);
+        /* Repeated reads of the same words: a stable value means stored data (erase not applied),
+         * a changing value means the bus is not returning real array data (unreadable / floating). */
+        for (uint32_t i = 0; i < 4; i++)
+        {
+            volatile uint32_t *p = (volatile uint32_t *)(RX65N_DF_START_ADDR + (i * 4UL));
+            uint32_t r0 = p[0];
+            uint32_t r1 = p[0];
+            uint32_t r2 = p[0];
+            printf("  [DF_HW] read[%lu]: 0x%08lX 0x%08lX 0x%08lX (%s)\r\n",
+                   (unsigned long)i, (unsigned long)r0, (unsigned long)r1, (unsigned long)r2,
+                   ((r0 == r1) && (r1 == r2)) ? "stable" : "UNSTABLE");
+        }
         if (first_word != 0xFFFFFFFFUL)
         {
             printf("  [DF_HW] WARNING: erase not reflected in hardware (first word != 0xFFFFFFFF)\r\n");
