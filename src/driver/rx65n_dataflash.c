@@ -57,6 +57,149 @@ int rx65n_dataflash_ensure_read_mode(void)
 }
 
 /***********************************************************************************************************************
+ * Raw FACI (Flash Application Command Interface) primitives for RX65N Data Flash.
+ * These bypass the FIT r_flash_rx API, whose R_FLASH_Write/R_FLASH_Erase failed on this target while the same raw
+ * sequence was verified on hardware (program + read-back OK).
+ ***********************************************************************************************************************/
+#define RAW_FACI_CMD_AREA           (0x007E0000UL)
+#define RAW_FACI_CMD_PROGRAM        (0xE8)
+#define RAW_FACI_CMD_PROGRAM_DF_CNT (0x02)   /* 2 halfwords (4 bytes) per program command */
+#define RAW_FACI_CMD_BLOCK_ERASE    (0x20)
+#define RAW_FACI_CMD_FINAL          (0xD0)
+#define RAW_FACI_CMD_STATUS_CLEAR   (0x50)
+#define RAW_FACI_CMD_FORCED_STOP    (0xB3)
+#define RAW_FACI_WAIT_PE            (100000UL)
+#define RAW_FACI_WAIT_ERASE         (20000000UL)
+#define RAW_FACI_WAIT_PROGRAM       (5000000UL)
+
+static int rx65n_raw_faci_pe_enter(void)
+{
+    uint32_t t;
+
+    (void)rx65n_dataflash_init(); /* idempotent: sets FPCKAR/EEPFCLK via FIT open */
+
+    FLASH.FENTRYR.WORD = 0xAA80; /* Data Flash P/E mode */
+    for (t = RAW_FACI_WAIT_PE; (FLASH.FENTRYR.WORD != 0x0080) && (t > 0); t--) { }
+    if (FLASH.FENTRYR.WORD != 0x0080)
+    {
+        printf("  [DF_HW] RAW: failed to enter DF P/E mode (FENTRYR=0x%04X)\r\n", (unsigned)FLASH.FENTRYR.WORD);
+        return RX65N_DF_ERR_HW;
+    }
+    FLASH.FWEPROR.BYTE = 0x01;
+    return RX65N_DF_SUCCESS;
+}
+
+static void rx65n_raw_faci_pe_exit(void)
+{
+    uint32_t t;
+
+    FLASH.FENTRYR.WORD = 0xAA00;
+    for (t = RAW_FACI_WAIT_PE; (FLASH.FENTRYR.WORD != 0x0000) && (t > 0); t--) { }
+    FLASH.FWEPROR.BYTE = 0x00;
+}
+
+/* Waits for FRDY and checks error flags. On error, releases the sequencer (forced stop + status clear). */
+static int rx65n_raw_faci_wait_done(uint32_t timeout, const char *what, uint32_t addr)
+{
+    volatile uint8_t *cmd8 = (volatile uint8_t *)RAW_FACI_CMD_AREA;
+    uint32_t fstatr;
+    int      err = RX65N_DF_SUCCESS;
+
+    while ((FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0))
+    {
+        timeout--;
+    }
+
+    fstatr = FLASH.FSTATR.LONG;
+    if ((FLASH.FSTATR.BIT.FRDY != 1) || (FLASH.FASTAT.BIT.CMDLK == 1) || (FLASH.FASTAT.BIT.DFAE == 1) ||
+        (FLASH.FSTATR.BIT.ILGLERR == 1) || (FLASH.FSTATR.BIT.ERSERR == 1) || (FLASH.FSTATR.BIT.PRGERR == 1))
+    {
+        printf("  [DF_HW] RAW %s error @0x%08lX: FSTATR=0x%08lX FASTAT=0x%02X\r\n",
+               what, (unsigned long)addr, (unsigned long)fstatr, (unsigned)FLASH.FASTAT.BYTE);
+        FLASH.FASTAT.BIT.DFAE = 0;
+        *cmd8 = RAW_FACI_CMD_FORCED_STOP;
+        for (timeout = 1000000UL; (FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0); timeout--) { }
+        *cmd8 = RAW_FACI_CMD_STATUS_CLEAR;
+        for (timeout = 1000000UL; (FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0); timeout--) { }
+        err = RX65N_DF_ERR_HW;
+    }
+    return err;
+}
+
+/* Erase num_blocks 64-byte blocks starting at start_addr (single P/E session). */
+static int rx65n_raw_faci_erase(uint32_t start_addr, uint32_t num_blocks)
+{
+    volatile uint8_t *cmd8 = (volatile uint8_t *)RAW_FACI_CMD_AREA;
+    int ret = rx65n_raw_faci_pe_enter();
+
+    if (RX65N_DF_SUCCESS != ret)
+    {
+        rx65n_raw_faci_pe_exit();
+        return ret;
+    }
+
+    FLASH.FCPSR.WORD = 0x0001; /* erasure priority mode (as in the FIT) */
+
+    for (uint32_t i = 0; i < num_blocks; i++)
+    {
+        uint32_t addr = start_addr + (i * RX65N_DF_BLOCK_SIZE);
+
+        FLASH.FSADDR.LONG = addr;
+        *cmd8 = RAW_FACI_CMD_BLOCK_ERASE;
+        *cmd8 = RAW_FACI_CMD_FINAL;
+
+        ret = rx65n_raw_faci_wait_done(RAW_FACI_WAIT_ERASE, "erase", addr);
+        if (RX65N_DF_SUCCESS != ret)
+        {
+            break;
+        }
+    }
+
+    rx65n_raw_faci_pe_exit();
+    return ret;
+}
+
+/* Program byte_count bytes (multiple of 4, flash_addr 4-byte aligned) from src (any alignment). */
+static int rx65n_raw_faci_program(uint32_t flash_addr, const uint8_t *src, uint32_t byte_count)
+{
+    volatile uint8_t  *cmd8  = (volatile uint8_t *)RAW_FACI_CMD_AREA;
+    volatile uint16_t *cmd16 = (volatile uint16_t *)RAW_FACI_CMD_AREA;
+    int ret = rx65n_raw_faci_pe_enter();
+
+    if (RX65N_DF_SUCCESS != ret)
+    {
+        rx65n_raw_faci_pe_exit();
+        return ret;
+    }
+
+    for (uint32_t off = 0; off < byte_count; off += 4)
+    {
+        uint16_t h[2];
+        uint32_t addr = flash_addr + off;
+
+        memcpy(h, &src[off], sizeof(h));
+
+        FLASH.FSADDR.LONG = addr;
+        *cmd8 = RAW_FACI_CMD_PROGRAM;
+        *cmd8 = RAW_FACI_CMD_PROGRAM_DF_CNT;
+        *cmd16 = h[0];
+        while (FLASH.FSTATR.BIT.DBFULL == 1) { }
+        *cmd16 = h[1];
+        while (FLASH.FSTATR.BIT.DBFULL == 1) { }
+        *cmd8 = RAW_FACI_CMD_FINAL;
+
+        ret = rx65n_raw_faci_wait_done(RAW_FACI_WAIT_PROGRAM, "program", addr);
+        if (RX65N_DF_SUCCESS != ret)
+        {
+            break;
+        }
+    }
+
+    rx65n_raw_faci_pe_exit();
+    return ret;
+}
+
+/***********************************************************************************************************************
  * Function Name: rx65n_dataflash_erase_block
  * Description  : Erases a single 64-byte block starting at block_addr.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
@@ -87,73 +230,15 @@ int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks)
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    flash_err_t err = R_FLASH_Erase((flash_block_address_t)start_addr, num_blocks);
-    if (FLASH_SUCCESS != err)
+    if (RX65N_DF_SUCCESS != rx65n_raw_faci_erase(start_addr, num_blocks))
     {
-        printf("  [DF_HW] R_FLASH_Erase failed at 0x%08lX (blocks=%lu): err=%d\r\n",
-               (unsigned long)start_addr, (unsigned long)num_blocks, (int)err);
-        rx65n_dataflash_ensure_read_mode();
+        printf("  [DF_HW] RAW FACI erase failed at 0x%08lX (blocks=%lu)\r\n",
+               (unsigned long)start_addr, (unsigned long)num_blocks);
         return RX65N_DF_ERR_HW;
     }
 
-    /* Guarantee flash controller is returned to memory-mapped read mode */
-    rx65n_dataflash_ensure_read_mode();
-
     return RX65N_DF_SUCCESS;
-}
 
-/***********************************************************************************************************************
- * Function Name: rx65n_dataflash_diag_raw_program
- * Description  : Diagnostic only. Programs 4 bytes in the last 64-byte block with raw FACI commands (bypassing the
- *                FIT) to expose FSTATR/FASTAT error flags, reads the result back, then erases the block again.
- ***********************************************************************************************************************/
-static void rx65n_dataflash_diag_raw_program(void)
-{
-    const uint32_t addr = RX65N_DF_END_ADDR - RX65N_DF_BLOCK_SIZE;
-    volatile uint8_t  *cmd8  = (volatile uint8_t *)0x007E0000UL;
-    volatile uint16_t *cmd16 = (volatile uint16_t *)0x007E0000UL;
-    uint32_t timeout;
-    uint32_t fstatr;
-    uint8_t  fastat;
-
-    FLASH.FENTRYR.WORD = 0xAA80;
-    for (timeout = 100000; (FLASH.FENTRYR.WORD != 0x0080) && (timeout > 0); timeout--) { }
-    FLASH.FWEPROR.BYTE = 0x01;
-
-    FLASH.FSADDR.LONG = addr;
-    *cmd8 = 0xE8;
-    *cmd8 = 0x02;
-    *cmd16 = 0xA5A5;
-    while (FLASH.FSTATR.BIT.DBFULL == 1) { }
-    *cmd16 = 0xA5A5;
-    while (FLASH.FSTATR.BIT.DBFULL == 1) { }
-    *cmd8 = 0xD0;
-    for (timeout = 10000000; (FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0); timeout--) { }
-
-    fstatr = FLASH.FSTATR.LONG;
-    fastat = FLASH.FASTAT.BYTE;
-    printf("  [DF_HW] RAW program @0x%08lX: FSTATR=0x%08lX (ILGLERR=%u PRGERR=%u FLWEERR=%u ILGCOMERR=%u) FASTAT=0x%02X (CMDLK=%u DFAE=%u) timeout_left=%lu\r\n",
-           (unsigned long)addr, (unsigned long)fstatr,
-           (unsigned)((fstatr >> 14) & 1U), (unsigned)((fstatr >> 12) & 1U), (unsigned)((fstatr >> 6) & 1U),
-           (unsigned)((fstatr >> 23) & 1U), (unsigned)fastat,
-           (unsigned)((fastat >> 4) & 1U), (unsigned)((fastat >> 3) & 1U), (unsigned long)timeout);
-
-    if (FLASH.FASTAT.BIT.CMDLK == 1)
-    {
-        *cmd8 = 0xB3; /* forced stop */
-        for (timeout = 1000000; (FLASH.FSTATR.BIT.FRDY != 1) && (timeout > 0); timeout--) { }
-    }
-
-    FLASH.FENTRYR.WORD = 0xAA00;
-    for (timeout = 100000; (FLASH.FENTRYR.WORD != 0x0000) && (timeout > 0); timeout--) { }
-    FLASH.FWEPROR.BYTE = 0x00;
-
-    printf("  [DF_HW] RAW program readback @0x%08lX: 0x%08lX (programmed 0xA5A5A5A5)\r\n",
-           (unsigned long)addr, (unsigned long)(*(volatile uint32_t *)addr));
-
-    /* Restore the block to erased state through the FIT */
-    (void)R_FLASH_Erase((flash_block_address_t)addr, 1);
-    rx65n_dataflash_ensure_read_mode();
 }
 
 /***********************************************************************************************************************
@@ -173,24 +258,15 @@ int rx65n_dataflash_erase_all(void)
            (unsigned long)RX65N_DF_START_ADDR,
            (unsigned long)(RX65N_DF_END_ADDR - 1));
 
-    /* Erase block by block to guarantee reliable sequencing on hardware */
-    for (uint32_t blk = 0; blk < RX65N_DF_TOTAL_BLOCKS; blk++)
+    /* Erase all blocks with raw FACI commands in a single P/E session */
+    if (RX65N_DF_SUCCESS != rx65n_raw_faci_erase(RX65N_DF_START_ADDR, RX65N_DF_TOTAL_BLOCKS))
     {
-        uint32_t addr = RX65N_DF_START_ADDR + (blk * RX65N_DF_BLOCK_SIZE);
-        flash_err_t err = R_FLASH_Erase((flash_block_address_t)addr, 1);
-        if (FLASH_SUCCESS != err)
-        {
-            printf("  [DF_HW] ERROR: R_FLASH_Erase failed at block %lu (0x%08lX): err=%d\r\n",
-                   (unsigned long)blk, (unsigned long)addr, (int)err);
-            rx65n_dataflash_ensure_read_mode();
-            return RX65N_DF_ERR_HW;
-        }
-
-        if ((blk == 0) || (blk == (RX65N_DF_TOTAL_BLOCKS - 1)))
-        {
-            printf("  [DF_HW] Block %lu (0x%08lX) erased OK\r\n", (unsigned long)blk, (unsigned long)addr);
-        }
+        printf("  [DF_HW] ERROR: RAW FACI erase of all blocks failed\r\n");
+        return RX65N_DF_ERR_HW;
     }
+    printf("  [DF_HW] Block 0 (0x%08lX) .. Block %lu (0x%08lX) erased OK\r\n",
+           (unsigned long)RX65N_DF_START_ADDR, (unsigned long)(RX65N_DF_TOTAL_BLOCKS - 1),
+           (unsigned long)(RX65N_DF_END_ADDR - RX65N_DF_BLOCK_SIZE));
 
     /* Guarantee flash controller is returned to memory-mapped read mode */
     rx65n_dataflash_ensure_read_mode();
@@ -257,8 +333,6 @@ int rx65n_dataflash_erase_all(void)
                    (unsigned)(*(volatile uint16_t *)0x00100000UL), (unsigned)(*(volatile uint16_t *)0x00100002UL));
         }
 
-        rx65n_dataflash_diag_raw_program();
-
 
         if (first_word != 0xFFFFFFFFUL)
         {
@@ -298,51 +372,15 @@ int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    /* Ensure source pointer is 32-bit aligned as required by R_FLASH_Write / FCU */
-    const uint8_t *write_buf = src_addr;
-    uint32_t aligned_stack_buf[16]; /* 64-byte aligned stack buffer for standard small writes */
-    uint8_t *allocated_buf = NULL;
-
-    if (((uintptr_t)src_addr % 4) != 0)
+    /* Program with raw FACI commands (proven on hardware). Source data is copied halfword-wise via
+     * memcpy so the source buffer needs no particular alignment. */
+    int ret = rx65n_raw_faci_program(flash_addr, src_addr, byte_count);
+    if (RX65N_DF_SUCCESS != ret)
     {
-        if (byte_count <= sizeof(aligned_stack_buf))
-        {
-            memcpy(aligned_stack_buf, src_addr, byte_count);
-            write_buf = (const uint8_t *)aligned_stack_buf;
-        }
-        else
-        {
-            /* For larger unaligned writes (rare in LevelX, usually 4 or 512 bytes) */
-            allocated_buf = (uint8_t *)malloc(byte_count + 4);
-            if (allocated_buf != NULL)
-            {
-                uintptr_t aligned_addr = ((uintptr_t)allocated_buf + 3) & ~(uintptr_t)3;
-                memcpy((void *)aligned_addr, src_addr, byte_count);
-                write_buf = (const uint8_t *)aligned_addr;
-            }
-        }
-    }
-
-    /* Clear any lingering command lock status before writing */
-    R_FLASH_Control(FLASH_CMD_RESET, NULL);
-
-    flash_err_t err = R_FLASH_Write((uint32_t)write_buf, flash_addr, byte_count);
-
-    if (allocated_buf != NULL)
-    {
-        free(allocated_buf);
-    }
-
-    if (FLASH_SUCCESS != err)
-    {
-        printf("  [DF_HW] R_FLASH_Write failed: dest=0x%08lX, bytes=%lu, err=%d\r\n",
-               (unsigned long)flash_addr, (unsigned long)byte_count, (int)err);
-        rx65n_dataflash_ensure_read_mode();
+        printf("  [DF_HW] RAW FACI program failed: dest=0x%08lX, bytes=%lu\r\n",
+               (unsigned long)flash_addr, (unsigned long)byte_count);
         return RX65N_DF_ERR_HW;
     }
-
-    /* Guarantee flash controller is returned to memory-mapped read mode */
-    rx65n_dataflash_ensure_read_mode();
 
     return RX65N_DF_SUCCESS;
 }
