@@ -152,7 +152,7 @@ RX65N（RV40F プロセス）の内蔵データフラッシュは、一般的な
 - **IDE**: Renesas e2 studio
 - **コンパイラ**: GCC for Renesas RX 8.3.0 / 14.2.0
 - **ターゲットボード**: RX65N 搭載ボード (Target Board for RX65N / Envision Kit 等)
-- **UART 出力**: SCI 通信 (115200 bps, 8bit, パリティなし, 停止ビット1)
+- **ログ出力**: e2 studio の **Renesas Debug Console**（GDB / セミホスティング標準出力）を使用
 
 ### コマンドラインでのビルド手順
 ```powershell

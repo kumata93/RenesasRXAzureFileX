@@ -152,7 +152,7 @@ The RX65N on-chip Data Flash (RV40F silicon process) has specific hardware const
 - **IDE**: Renesas e2 studio
 - **Toolchain**: GCC for Renesas RX 8.3.0 or 14.2.0
 - **Target Board**: Renesas Target Board for RX65N or Envision Kit
-- **UART Terminal**: 115,200 bps, 8 data bits, no parity, 1 stop bit
+- **Console Output**: e2 studio **Renesas Debug Console** (GDB / Semihosting standard output)
 
 ### Command-Line Build
 ```powershell

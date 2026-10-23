@@ -105,12 +105,9 @@ filex_renesas_rx/
 - **評価ボード**:
   - Renesas Target Board for RX65N (RTK5RX65N0C00000BR)
   - Renesas Envision Kit RX65N または Renesas RX65N Cloud Kit
-- **シリアルコンソール接続仕様**:
-  - ボーレート: `115,200 bps`
-  - データビット: 8 bit
-  - パリティ: なし (None)
-  - ストップビット: 1 bit
-  - フロー制御: なし (None)
+- **ログ出力仕様**:
+  - e2 studio の **Renesas Debug Console**（GDB / セミホスティング `stdout` 出力）経由でログを表示します。
+  - ※ 外部シリアル通信（UART/Tera Term 等）へのリダイレクトではなく、デバッガ標準コンソールを使用します。
 
 ### 開発ツールチェーン
 - **IDE**: Renesas e2 studio (2024 以降推奨)
@@ -150,9 +147,9 @@ mingw32-make.exe -j8 all
 
 ## 6. 動作確認および期待ログ出力
 
-ボードとホスト PC を USB ケーブル（デバッグ/シリアル兼用）で接続し、ターミナルエミュレータ（Tera Term 等）を `115200 bps` で開いた状態でプログラムを実行します。
+e2 studio 上でデバッグ実行（F8 等）を開始すると、**Renesas Debug Console** ビューに実行ログが出力されます。
 
-### 期待されるシリアルコンソール出力例
+### 期待されるコンソール出力例
 
 ```text
 ===============================================================
