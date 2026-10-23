@@ -62,6 +62,7 @@ graph TD
 ```text
 filex_renesas_rx/
 ├── BASIC_DESIGN_SPECIFICATION.md      # 基本設計書（全7章）
+├── PORTING_GUIDE.md                   # FileX + LevelX ポーティング解説および利用ガイド
 ├── README.md                          # 本書
 ├── .cproject                          # e2 studio プロジェクト設定 (GCC for RX 14.2)
 ├── .project                           # Eclipse プロジェクト定義
