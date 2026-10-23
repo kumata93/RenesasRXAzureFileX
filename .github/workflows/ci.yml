@@ -18,7 +18,7 @@ jobs:
       - name: Install build essentials
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc make
+          sudo apt-get install -y build-essential gcc make gcc-multilib
 
       - name: Run Unity unit tests
         working-directory: tests

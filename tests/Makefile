@@ -4,6 +4,13 @@
 CC = gcc
 CFLAGS ?= -Wall -Wextra -O2
 
+# FileX/LevelX assume ULONG is 32-bit. On LP64 hosts (Linux x86_64) 'unsigned long' is
+# 64-bit, which corrupts boot-record/metadata layouts, so build 32-bit there.
+# (Windows MinGW already has a 32-bit 'long'.)
+ifneq ($(OS),Windows_NT)
+    CFLAGS += -m32
+endif
+
 # Include paths
 INCLUDES = -Iunity \
            -Imocks \
