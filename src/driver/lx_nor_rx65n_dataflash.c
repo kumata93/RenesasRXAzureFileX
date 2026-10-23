@@ -142,20 +142,15 @@ UINT lx_nor_rx65n_dataflash_block_erased_verify(ULONG block)
         return LX_ERROR;
     }
 
-    const uint32_t *word_ptr = (const uint32_t *)(RX65N_DF_START_ADDR + (block * LX_NOR_RX65N_BLOCK_SIZE));
-    ULONG words = LX_NOR_RX65N_WORDS_PER_BLOCK;
-
-    for (ULONG w = 0; w < words; w++)
+    /* Check erasure state via rx65n_dataflash_is_block_erased */
+    if (rx65n_dataflash_is_block_erased((uint32_t)block))
     {
-        if (word_ptr[w] != 0xFFFFFFFFUL)
-        {
-            printf("[LevelX_Port] block_erased_verify: block %lu NOT clean at word offset %lu (val=0x%08lX)\r\n",
-                   (unsigned long)block, (unsigned long)w, (unsigned long)word_ptr[w]);
-            return LX_ERROR;
-        }
+        return LX_SUCCESS;
     }
 
-    return LX_SUCCESS;
+    printf("[LevelX_Port] block_erased_verify: block %lu NOT clean (written in map)\r\n",
+           (unsigned long)block);
+    return LX_ERROR;
 }
 
 /***********************************************************************************************************************

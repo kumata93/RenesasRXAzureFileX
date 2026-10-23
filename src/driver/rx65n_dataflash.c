@@ -9,6 +9,67 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Bitmap tracking written state for all 512 physical 64-byte blocks.
+ * On RX65N (RV40F process), erased flash reads are undefined rather than 0xFF.
+ * LevelX NOR flash requires erased areas to read 0xFFFFFFFF so that it recognizes
+ * an unformatted flash and correctly reads erased sectors.
+ * 0 = unwritten (erased, returns 0xFF), 1 = written (returns real memory contents) */
+static uint8_t s_df_written_map[RX65N_DF_TOTAL_BLOCKS / 8];
+static bool    s_df_map_initialized = false;
+
+static void rx65n_dataflash_map_init_from_hw(void)
+{
+    /* Clear bitmap first (mark all unwritten) */
+    memset(s_df_written_map, 0, sizeof(s_df_written_map));
+
+    /* Check each 64-byte block using hardware BlankCheck to initialize written map */
+    for (uint32_t b = 0; b < RX65N_DF_TOTAL_BLOCKS; b++)
+    {
+        uint32_t addr = RX65N_DF_START_ADDR + (b * RX65N_DF_BLOCK_SIZE);
+        flash_res_t res = FLASH_RES_NOT_BLANK;
+        flash_err_t err = R_FLASH_BlankCheck(addr, RX65N_DF_BLOCK_SIZE, &res);
+        if ((FLASH_SUCCESS == err) && (FLASH_RES_NOT_BLANK == res))
+        {
+            s_df_written_map[b / 8] |= (uint8_t)(1 << (b % 8));
+        }
+    }
+    rx65n_dataflash_ensure_read_mode();
+    s_df_map_initialized = true;
+}
+
+static void rx65n_dataflash_mark_written(uint32_t addr, uint32_t bytes)
+{
+    uint32_t start_blk = (addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
+    uint32_t end_blk   = (addr + bytes - 1 - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
+
+    for (uint32_t b = start_blk; b <= end_blk; b++)
+    {
+        if (b < RX65N_DF_TOTAL_BLOCKS)
+        {
+            s_df_written_map[b / 8] |= (uint8_t)(1 << (b % 8));
+        }
+    }
+}
+
+static void rx65n_dataflash_mark_erased(uint32_t addr, uint32_t num_blocks)
+{
+    uint32_t start_blk = (addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
+
+    for (uint32_t b = start_blk; (b < (start_blk + num_blocks)) && (b < RX65N_DF_TOTAL_BLOCKS); b++)
+    {
+        s_df_written_map[b / 8] &= (uint8_t)(~(1 << (b % 8)));
+    }
+}
+
+static bool rx65n_dataflash_is_hw_block_written(uint32_t blk_idx)
+{
+    if (blk_idx >= RX65N_DF_TOTAL_BLOCKS)
+    {
+        return false;
+    }
+    return (s_df_written_map[blk_idx / 8] & (1 << (blk_idx % 8))) != 0;
+}
+
 /***********************************************************************************************************************
  * Function Name: rx65n_dataflash_init
  * Description  : Initializes the flash peripheral sequencer and enters ready state.
@@ -25,6 +86,12 @@ int rx65n_dataflash_init(void)
          * on RX65N is gated by FENTRYR (P/E vs. read mode) and FWEPROR.FLWE, which the FIT
          * driver manages. Hence we only make sure the sequencer is in memory-mapped read mode. */
         rx65n_dataflash_ensure_read_mode();
+
+        if (!s_df_map_initialized)
+        {
+            rx65n_dataflash_map_init_from_hw();
+        }
+
         return RX65N_DF_SUCCESS;
     }
 
@@ -237,8 +304,10 @@ int rx65n_dataflash_erase(uint32_t start_addr, uint32_t num_blocks)
         return RX65N_DF_ERR_HW;
     }
 
-    return RX65N_DF_SUCCESS;
+    /* Mark erased blocks in bitmap */
+    rx65n_dataflash_mark_erased(start_addr, num_blocks);
 
+    return RX65N_DF_SUCCESS;
 }
 
 /***********************************************************************************************************************
@@ -271,73 +340,19 @@ int rx65n_dataflash_erase_all(void)
     /* Guarantee flash controller is returned to memory-mapped read mode */
     rx65n_dataflash_ensure_read_mode();
 
+    /* Mark all blocks erased in bitmap */
+    memset(s_df_written_map, 0, sizeof(s_df_written_map));
+    s_df_map_initialized = true;
+
     printf("  [DF_HW] All %lu blocks erased successfully. Returned to read mode.\r\n",
            (unsigned long)RX65N_DF_TOTAL_BLOCKS);
 
-    /* Physical verification: directly read the first word of the Data Flash */
+    /* Verify virtual read returns clean 0xFFFFFFFF across start of flash */
     {
-        uint32_t first_word = *(volatile uint32_t *)RX65N_DF_START_ADDR;
-        printf("  [DF_HW] Direct read check at 0x%08lX: 0x%08lX (Expected: 0xFFFFFFFF)\r\n",
+        uint32_t first_word = 0;
+        rx65n_dataflash_read(RX65N_DF_START_ADDR, (uint8_t *)&first_word, sizeof(first_word));
+        printf("  [DF_HW] Virtual read check at 0x%08lX: 0x%08lX (Expected: 0xFFFFFFFF)\r\n",
                (unsigned long)RX65N_DF_START_ADDR, (unsigned long)first_word);
-        printf("  [DF_HW] FENTRYR=0x%04X FWEPROR=0x%02X FASTAT=0x%02X (DFAE=%u CMDLK=%u)\r\n",
-               (unsigned)FLASH.FENTRYR.WORD, (unsigned)FLASH.FWEPROR.BYTE,
-               (unsigned)FLASH.FASTAT.BYTE, (unsigned)FLASH.FASTAT.BIT.DFAE,
-               (unsigned)FLASH.FASTAT.BIT.CMDLK);
-        printf("  [DF_HW] FSTATR=0x%08lX (FRDY=%u ILGLERR=%u ERSERR=%u PRGERR=%u FLWEERR=%u) FPCKAR=0x%04X EEPFCLK=%u\r\n",
-               (unsigned long)FLASH.FSTATR.LONG, (unsigned)FLASH.FSTATR.BIT.FRDY,
-               (unsigned)FLASH.FSTATR.BIT.ILGLERR, (unsigned)FLASH.FSTATR.BIT.ERSERR,
-               (unsigned)FLASH.FSTATR.BIT.PRGERR, (unsigned)FLASH.FSTATR.BIT.FLWEERR,
-               (unsigned)FLASH.FPCKAR.WORD, (unsigned)FLASH.EEPFCLK);
-        /* Repeated reads of the same words: a stable value means stored data (erase not applied),
-         * a changing value means the bus is not returning real array data (unreadable / floating). */
-        for (uint32_t i = 0; i < 4; i++)
-        {
-            volatile uint32_t *p = (volatile uint32_t *)(RX65N_DF_START_ADDR + (i * 4UL));
-            uint32_t r0 = p[0];
-            uint32_t r1 = p[0];
-            uint32_t r2 = p[0];
-            printf("  [DF_HW] read[%lu]: 0x%08lX 0x%08lX 0x%08lX (%s)\r\n",
-                   (unsigned long)i, (unsigned long)r0, (unsigned long)r1, (unsigned long)r2,
-                   ((r0 == r1) && (r1 == r2)) ? "stable" : "UNSTABLE");
-        }
-
-        /* FACI blank check does not depend on CPU bus reads: it tells whether the array is really erased. */
-        {
-            flash_res_t bc_res = FLASH_RES_NOT_BLANK;
-            flash_err_t bc_err = R_FLASH_BlankCheck(RX65N_DF_START_ADDR, RX65N_DF_BLOCK_SIZE, &bc_res);
-            printf("  [DF_HW] FACI BlankCheck(blk0, 64B): err=%d result=%s\r\n", (int)bc_err,
-                   (FLASH_RES_BLANK == bc_res) ? "BLANK" : "NOT_BLANK");
-            bc_res = FLASH_RES_NOT_BLANK;
-            bc_err = R_FLASH_BlankCheck(RX65N_DF_START_ADDR, RX65N_DF_SIZE, &bc_res);
-            printf("  [DF_HW] FACI BlankCheck(all, 32KB): err=%d result=%s\r\n", (int)bc_err,
-                   (FLASH_RES_BLANK == bc_res) ? "BLANK" : "NOT_BLANK");
-            rx65n_dataflash_ensure_read_mode();
-        }
-
-        /* Re-read after a settling delay to rule out a read-mode transition wait time. */
-        R_BSP_SoftwareDelay(1, BSP_DELAY_MILLISECS);
-        printf("  [DF_HW] re-read after 1ms: 0x%08lX\r\n",
-               (unsigned long)(*(volatile uint32_t *)RX65N_DF_START_ADDR));
-
-        /* Other addresses and access widths (byte / halfword / word) */
-        {
-            static const uint32_t probe[] = { 0x00100040UL, 0x00101000UL, 0x00104000UL, 0x00107FC0UL, 0x00107FFCUL };
-            for (uint32_t i = 0; i < (sizeof(probe) / sizeof(probe[0])); i++)
-            {
-                printf("  [DF_HW] probe 0x%08lX: w=0x%08lX\r\n", (unsigned long)probe[i],
-                       (unsigned long)(*(volatile uint32_t *)probe[i]));
-            }
-            printf("  [DF_HW] width probe @0x00100000: b=%02X %02X %02X %02X h=%04X %04X\r\n",
-                   (unsigned)(*(volatile uint8_t *)0x00100000UL), (unsigned)(*(volatile uint8_t *)0x00100001UL),
-                   (unsigned)(*(volatile uint8_t *)0x00100002UL), (unsigned)(*(volatile uint8_t *)0x00100003UL),
-                   (unsigned)(*(volatile uint16_t *)0x00100000UL), (unsigned)(*(volatile uint16_t *)0x00100002UL));
-        }
-
-
-        if (first_word != 0xFFFFFFFFUL)
-        {
-            printf("  [DF_HW] WARNING: erase not reflected in hardware (first word != 0xFFFFFFFF)\r\n");
-        }
     }
     return RX65N_DF_SUCCESS;
 }
@@ -382,12 +397,16 @@ int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t
         return RX65N_DF_ERR_HW;
     }
 
+    /* Mark corresponding blocks as written in bitmap */
+    rx65n_dataflash_mark_written(flash_addr, byte_count);
+
     return RX65N_DF_SUCCESS;
 }
 
 /***********************************************************************************************************************
  * Function Name: rx65n_dataflash_read
  * Description  : Reads byte_count data from Data Flash (memory-mapped address) to dst_buf buffer.
+ *                Provides virtual NOR 0xFF semantics for unwritten/erased blocks.
  * Return Value : RX65N_DF_SUCCESS on success, negative error code on failure.
  ***********************************************************************************************************************/
 int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_count)
@@ -409,9 +428,62 @@ int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_co
 
     if (byte_count > 0)
     {
-        /* Memory-mapped read */
-        memcpy(dst_buf, (const void *)flash_addr, byte_count);
+        uint32_t curr_addr = flash_addr;
+        uint32_t remaining = byte_count;
+        uint8_t *dst       = dst_buf;
+
+        while (remaining > 0)
+        {
+            uint32_t blk_idx = (curr_addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
+            uint32_t blk_offset = (curr_addr - RX65N_DF_START_ADDR) % RX65N_DF_BLOCK_SIZE;
+            uint32_t chunk = RX65N_DF_BLOCK_SIZE - blk_offset;
+            if (chunk > remaining)
+            {
+                chunk = remaining;
+            }
+
+            if (rx65n_dataflash_is_hw_block_written(blk_idx))
+            {
+                /* Written block: read actual physical flash contents */
+                memcpy(dst, (const void *)curr_addr, chunk);
+            }
+            else
+            {
+                /* Unwritten (erased) block: virtual NOR 0xFF semantics */
+                memset(dst, 0xFF, chunk);
+            }
+
+            curr_addr += chunk;
+            dst += chunk;
+            remaining -= chunk;
+        }
     }
 
     return RX65N_DF_SUCCESS;
+}
+
+/***********************************************************************************************************************
+ * Function Name: rx65n_dataflash_is_block_erased
+ * Description  : Checks if a 4KB logical LevelX block (64 physical blocks) is completely erased.
+ * Return Value : 1 if erased, 0 if written.
+ ***********************************************************************************************************************/
+int rx65n_dataflash_is_block_erased(uint32_t logical_block)
+{
+    if (logical_block >= (RX65N_DF_SIZE / 4096UL))
+    {
+        return 0;
+    }
+
+    uint32_t start_hw_blk = logical_block * (4096UL / RX65N_DF_BLOCK_SIZE);
+    uint32_t num_hw_blks  = 4096UL / RX65N_DF_BLOCK_SIZE;
+
+    for (uint32_t b = start_hw_blk; b < (start_hw_blk + num_hw_blks); b++)
+    {
+        if (rx65n_dataflash_is_hw_block_written(b))
+        {
+            return 0;
+        }
+    }
+
+    return 1;
 }

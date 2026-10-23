@@ -78,6 +78,13 @@ int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_co
  */
 int rx65n_dataflash_ensure_read_mode(void);
 
+/**
+ * @brief Checks if a 4KB logical block (or 64 contiguous 64-byte blocks) is erased.
+ * @param logical_block Index of the 4KB block (0 to 7).
+ * @return 1 if completely erased, 0 if written or not erased.
+ */
+int rx65n_dataflash_is_block_erased(uint32_t logical_block);
+
 #ifdef __cplusplus
 }
 #endif
