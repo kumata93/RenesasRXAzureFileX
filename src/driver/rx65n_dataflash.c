@@ -9,20 +9,49 @@
 #include <string.h>
 #include <stdlib.h>
 
-/* Bitmap tracking written state for all 512 physical 64-byte blocks.
- * On RX65N (RV40F process), erased flash reads are undefined rather than 0xFF.
- * LevelX NOR flash requires erased areas to read 0xFFFFFFFF so that it recognizes
- * an unformatted flash and correctly reads erased sectors.
- * 0 = unwritten (erased, returns 0xFF), 1 = written (returns real memory contents) */
-static uint8_t s_df_written_map[RX65N_DF_TOTAL_BLOCKS / 8];
+/* Bitmap tracking the programmed state of every 4-byte word (8192 words = 1 KB of RAM).
+ * On RX65N (RV40F process), erased flash reads are undefined rather than 0xFF, and a programmed
+ * word can NOT be programmed again without erasing its whole 64-byte block.
+ * LevelX NOR flash, however, expects (a) erased areas to read 0xFFFFFFFF and (b) the ability to
+ * overwrite a word in place by clearing bits (1 -> 0). Both are emulated in this driver:
+ *   0 = not programmed (reads as 0xFFFFFFFF), 1 = programmed (reads real memory contents). */
+#define RX65N_DF_WORDS_PER_HW_BLOCK (RX65N_DF_BLOCK_SIZE / RX65N_DF_WRITE_UNIT) /* 16 */
+#define RX65N_DF_TOTAL_WORDS        (RX65N_DF_SIZE / RX65N_DF_WRITE_UNIT)       /* 8192 */
+static uint8_t s_df_written_map[RX65N_DF_TOTAL_WORDS / 8];
 static bool    s_df_map_initialized = false;
+
+static bool rx65n_dataflash_is_word_programmed(uint32_t word_idx)
+{
+    if (word_idx >= RX65N_DF_TOTAL_WORDS)
+    {
+        return false;
+    }
+    return (s_df_written_map[word_idx / 8] & (1 << (word_idx % 8))) != 0;
+}
+
+static void rx65n_dataflash_set_word(uint32_t word_idx, bool programmed)
+{
+    if (word_idx >= RX65N_DF_TOTAL_WORDS)
+    {
+        return;
+    }
+    if (programmed)
+    {
+        s_df_written_map[word_idx / 8] |= (uint8_t)(1 << (word_idx % 8));
+    }
+    else
+    {
+        s_df_written_map[word_idx / 8] &= (uint8_t)(~(1 << (word_idx % 8)));
+    }
+}
 
 static void rx65n_dataflash_map_init_from_hw(void)
 {
-    /* Clear bitmap first (mark all unwritten) */
+    /* Clear bitmap first (mark all unprogrammed) */
     memset(s_df_written_map, 0, sizeof(s_df_written_map));
 
-    /* Check each 64-byte block using hardware BlankCheck to initialize written map */
+    /* Use hardware BlankCheck per 64-byte block. A non-blank block has unknown word-level state,
+     * so conservatively treat all its words as programmed. */
     for (uint32_t b = 0; b < RX65N_DF_TOTAL_BLOCKS; b++)
     {
         uint32_t addr = RX65N_DF_START_ADDR + (b * RX65N_DF_BLOCK_SIZE);
@@ -30,44 +59,42 @@ static void rx65n_dataflash_map_init_from_hw(void)
         flash_err_t err = R_FLASH_BlankCheck(addr, RX65N_DF_BLOCK_SIZE, &res);
         if ((FLASH_SUCCESS == err) && (FLASH_RES_NOT_BLANK == res))
         {
-            s_df_written_map[b / 8] |= (uint8_t)(1 << (b % 8));
+            for (uint32_t w = 0; w < RX65N_DF_WORDS_PER_HW_BLOCK; w++)
+            {
+                rx65n_dataflash_set_word((b * RX65N_DF_WORDS_PER_HW_BLOCK) + w, true);
+            }
         }
     }
     rx65n_dataflash_ensure_read_mode();
     s_df_map_initialized = true;
 }
 
-static void rx65n_dataflash_mark_written(uint32_t addr, uint32_t bytes)
-{
-    uint32_t start_blk = (addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
-    uint32_t end_blk   = (addr + bytes - 1 - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
-
-    for (uint32_t b = start_blk; b <= end_blk; b++)
-    {
-        if (b < RX65N_DF_TOTAL_BLOCKS)
-        {
-            s_df_written_map[b / 8] |= (uint8_t)(1 << (b % 8));
-        }
-    }
-}
-
 static void rx65n_dataflash_mark_erased(uint32_t addr, uint32_t num_blocks)
 {
-    uint32_t start_blk = (addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
+    uint32_t start_word = (addr - RX65N_DF_START_ADDR) / RX65N_DF_WRITE_UNIT;
+    uint32_t count      = num_blocks * RX65N_DF_WORDS_PER_HW_BLOCK;
 
-    for (uint32_t b = start_blk; (b < (start_blk + num_blocks)) && (b < RX65N_DF_TOTAL_BLOCKS); b++)
+    for (uint32_t w = start_word; (w < (start_word + count)) && (w < RX65N_DF_TOTAL_WORDS); w++)
     {
-        s_df_written_map[b / 8] &= (uint8_t)(~(1 << (b % 8)));
+        rx65n_dataflash_set_word(w, false);
     }
 }
 
+/* True if any word of the 64-byte hardware block is programmed. */
 static bool rx65n_dataflash_is_hw_block_written(uint32_t blk_idx)
 {
     if (blk_idx >= RX65N_DF_TOTAL_BLOCKS)
     {
         return false;
     }
-    return (s_df_written_map[blk_idx / 8] & (1 << (blk_idx % 8))) != 0;
+    for (uint32_t w = 0; w < RX65N_DF_WORDS_PER_HW_BLOCK; w++)
+    {
+        if (rx65n_dataflash_is_word_programmed((blk_idx * RX65N_DF_WORDS_PER_HW_BLOCK) + w))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /***********************************************************************************************************************
@@ -387,18 +414,119 @@ int rx65n_dataflash_write(const uint8_t *src_addr, uint32_t flash_addr, uint32_t
         return RX65N_DF_ERR_INVALID_PARAM;
     }
 
-    /* Program with raw FACI commands (proven on hardware). Source data is copied halfword-wise via
-     * memcpy so the source buffer needs no particular alignment. */
-    int ret = rx65n_raw_faci_program(flash_addr, src_addr, byte_count);
-    if (RX65N_DF_SUCCESS != ret)
+    /* The RX65N Data Flash cannot reprogram an already programmed word without erasing its
+     * 64-byte block, while LevelX relies on NOR semantics (in-place bit clearing). Emulate:
+     *  - unprogrammed word      -> program directly (runs of words are batched)
+     *  - programmed, same value -> nothing to do
+     *  - programmed, new value  -> erase the 64-byte block and reprogram a merged image */
+    uint32_t off = 0;
+    while (off < byte_count)
     {
-        printf("  [DF_HW] RAW FACI program failed: dest=0x%08lX, bytes=%lu\r\n",
-               (unsigned long)flash_addr, (unsigned long)byte_count);
-        return RX65N_DF_ERR_HW;
-    }
+        uint32_t addr     = flash_addr + off;
+        uint32_t word_idx = (addr - RX65N_DF_START_ADDR) / RX65N_DF_WRITE_UNIT;
+        uint32_t new_val;
+        int      ret;
 
-    /* Mark corresponding blocks as written in bitmap */
-    rx65n_dataflash_mark_written(flash_addr, byte_count);
+        memcpy(&new_val, &src_addr[off], sizeof(new_val));
+
+        if (!rx65n_dataflash_is_word_programmed(word_idx))
+        {
+            /* Batch a run of consecutive unprogrammed words that actually need programming */
+            uint32_t run = 0;
+            while (((off + (run * 4UL)) < byte_count))
+            {
+                uint32_t v;
+                uint32_t idx = word_idx + run;
+                memcpy(&v, &src_addr[off + (run * 4UL)], sizeof(v));
+                if (rx65n_dataflash_is_word_programmed(idx) || (0xFFFFFFFFUL == v))
+                {
+                    break;
+                }
+                run++;
+            }
+
+            if (0 == run)
+            {
+                /* Writing 0xFFFFFFFF over an erased word: nothing to program */
+                off += 4;
+                continue;
+            }
+
+            ret = rx65n_raw_faci_program(addr, &src_addr[off], run * 4UL);
+            if (RX65N_DF_SUCCESS != ret)
+            {
+                printf("  [DF_HW] RAW FACI program failed: dest=0x%08lX, bytes=%lu\r\n",
+                       (unsigned long)addr, (unsigned long)(run * 4UL));
+                return RX65N_DF_ERR_HW;
+            }
+            for (uint32_t i = 0; i < run; i++)
+            {
+                rx65n_dataflash_set_word(word_idx + i, true);
+            }
+            off += run * 4UL;
+        }
+        else
+        {
+            uint32_t cur_val;
+            uint32_t blk_base;
+            uint32_t img[RX65N_DF_WORDS_PER_HW_BLOCK];
+            uint32_t first_word;
+
+            memcpy(&cur_val, (const void *)addr, sizeof(cur_val));
+            if (cur_val == new_val)
+            {
+                off += 4;
+                continue;
+            }
+
+            /* Build merged image of the 64-byte block (virtual read semantics) */
+            blk_base   = RX65N_DF_START_ADDR + (((addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE) * RX65N_DF_BLOCK_SIZE);
+            first_word = (blk_base - RX65N_DF_START_ADDR) / RX65N_DF_WRITE_UNIT;
+            for (uint32_t i = 0; i < RX65N_DF_WORDS_PER_HW_BLOCK; i++)
+            {
+                img[i] = rx65n_dataflash_is_word_programmed(first_word + i) ?
+                         *(const volatile uint32_t *)(blk_base + (i * 4UL)) : 0xFFFFFFFFUL;
+            }
+            img[(addr - blk_base) / 4UL] = new_val;
+
+            ret = rx65n_raw_faci_erase(blk_base, 1);
+            if (RX65N_DF_SUCCESS != ret)
+            {
+                printf("  [DF_HW] RAW FACI block rewrite: erase failed at 0x%08lX\r\n", (unsigned long)blk_base);
+                return RX65N_DF_ERR_HW;
+            }
+            rx65n_dataflash_mark_erased(blk_base, 1);
+
+            /* Reprogram every word of the image that is not 0xFFFFFFFF (runs batched) */
+            uint32_t i = 0;
+            while (i < RX65N_DF_WORDS_PER_HW_BLOCK)
+            {
+                if (0xFFFFFFFFUL == img[i])
+                {
+                    i++;
+                    continue;
+                }
+                uint32_t j = i;
+                while ((j < RX65N_DF_WORDS_PER_HW_BLOCK) && (0xFFFFFFFFUL != img[j]))
+                {
+                    j++;
+                }
+                ret = rx65n_raw_faci_program(blk_base + (i * 4UL), (const uint8_t *)&img[i], (j - i) * 4UL);
+                if (RX65N_DF_SUCCESS != ret)
+                {
+                    printf("  [DF_HW] RAW FACI block rewrite: program failed at 0x%08lX\r\n",
+                           (unsigned long)(blk_base + (i * 4UL)));
+                    return RX65N_DF_ERR_HW;
+                }
+                for (uint32_t k = i; k < j; k++)
+                {
+                    rx65n_dataflash_set_word(first_word + k, true);
+                }
+                i = j;
+            }
+            off += 4;
+        }
+    }
 
     return RX65N_DF_SUCCESS;
 }
@@ -434,22 +562,22 @@ int rx65n_dataflash_read(uint32_t flash_addr, uint8_t *dst_buf, uint32_t byte_co
 
         while (remaining > 0)
         {
-            uint32_t blk_idx = (curr_addr - RX65N_DF_START_ADDR) / RX65N_DF_BLOCK_SIZE;
-            uint32_t blk_offset = (curr_addr - RX65N_DF_START_ADDR) % RX65N_DF_BLOCK_SIZE;
-            uint32_t chunk = RX65N_DF_BLOCK_SIZE - blk_offset;
+            uint32_t word_idx    = (curr_addr - RX65N_DF_START_ADDR) / RX65N_DF_WRITE_UNIT;
+            uint32_t word_offset = (curr_addr - RX65N_DF_START_ADDR) % RX65N_DF_WRITE_UNIT;
+            uint32_t chunk       = RX65N_DF_WRITE_UNIT - word_offset;
             if (chunk > remaining)
             {
                 chunk = remaining;
             }
 
-            if (rx65n_dataflash_is_hw_block_written(blk_idx))
+            if (rx65n_dataflash_is_word_programmed(word_idx))
             {
-                /* Written block: read actual physical flash contents */
+                /* Programmed word: read actual physical flash contents */
                 memcpy(dst, (const void *)curr_addr, chunk);
             }
             else
             {
-                /* Unwritten (erased) block: virtual NOR 0xFF semantics */
+                /* Unprogrammed (erased) word: virtual NOR 0xFF semantics */
                 memset(dst, 0xFF, chunk);
             }
 
