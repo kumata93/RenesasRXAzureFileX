@@ -50,16 +50,25 @@ static void rx65n_dataflash_map_init_from_hw(void)
     /* Clear bitmap first (mark all unprogrammed) */
     memset(s_df_written_map, 0, sizeof(s_df_written_map));
 
-    /* Use hardware BlankCheck per 64-byte block. A non-blank block has unknown word-level state,
-     * so conservatively treat all its words as programmed. */
+    /* Use hardware BlankCheck per 64-byte block, then refine non-blank blocks word by word
+     * (4-byte BlankCheck = the Data Flash minimum program size). This is essential after a reset:
+     * unprogrammed words inside a partially written block read undefined values and must NOT be
+     * treated as programmed data. If a word-level check fails, conservatively treat it as programmed. */
     for (uint32_t b = 0; b < RX65N_DF_TOTAL_BLOCKS; b++)
     {
         uint32_t addr = RX65N_DF_START_ADDR + (b * RX65N_DF_BLOCK_SIZE);
         flash_res_t res = FLASH_RES_NOT_BLANK;
         flash_err_t err = R_FLASH_BlankCheck(addr, RX65N_DF_BLOCK_SIZE, &res);
-        if ((FLASH_SUCCESS == err) && (FLASH_RES_NOT_BLANK == res))
+        if ((FLASH_SUCCESS == err) && (FLASH_RES_BLANK == res))
         {
-            for (uint32_t w = 0; w < RX65N_DF_WORDS_PER_HW_BLOCK; w++)
+            continue;
+        }
+
+        for (uint32_t w = 0; w < RX65N_DF_WORDS_PER_HW_BLOCK; w++)
+        {
+            flash_res_t wres = FLASH_RES_NOT_BLANK;
+            flash_err_t werr = R_FLASH_BlankCheck(addr + (w * RX65N_DF_WRITE_UNIT), RX65N_DF_WRITE_UNIT, &wres);
+            if ((FLASH_SUCCESS != werr) || (FLASH_RES_BLANK != wres))
             {
                 rx65n_dataflash_set_word((b * RX65N_DF_WORDS_PER_HW_BLOCK) + w, true);
             }
